@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>控制面板</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    .wrap { width: 400px; border-radius: 10px; background: #ffffffcc; backdrop-filter: blur(6px); box-shadow: 0 8px 30px rgba(0,0,0,.2); overflow: hidden; }
+    header { display:flex; align-items:center; justify-content:space-between; padding: 10px 12px; background:#f3f3f3; -webkit-app-region: drag; }
+    header .btn { border:none; background:#ddd; padding:6px 10px; border-radius:6px; cursor:pointer; -webkit-app-region: no-drag; }
+    header strong { -webkit-app-region: no-drag; }
+    .row { padding: 8px 12px; }
+    .input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius:6px; font-size: 14px; }
+    .buttons { display:flex; gap:8px; -webkit-app-region: no-drag; }
+    .btn-primary { background:#1e90ff; color:#fff; }
+    .preview-shell { padding: 8px 12px; }
+    .preview-frame { width: 100%; background:#111; border-radius:8px; display: block; }
+    .meta { color:#bbb; font-size: 12px; padding:4px 0; margin-bottom: 8px; }
+    select { width: 100%; padding:6px; border-radius:6px; border:1px solid #ccc; }
+    .suggestions { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 4px; background: #fff; display: none; }
+    .suggestion-item { padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 12px; }
+    .suggestion-item:hover { background: #f0f0f0; }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item.info-only { cursor: default; background: #f8f9fa; }
+    .suggestion-item.info-only:hover { background: #f8f9fa; }
+    .suggestion-py { font-weight: bold; color: #1e90ff; }
+    .suggestion-name { margin-left: 8px; }
+    .suggestion-range { color: #666; margin-left: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <strong>控制面板</strong>
+      <div class="buttons">
+        <button id="btnToggle" class="btn btn-primary">开始投影</button>
+        <button id="btnExit" class="btn">退出</button>
+      </div>
+    </header>
+
+    <div class="row">
+      <label>快捷输入（如：CSJ1 12-16 / CSJ 1:12）</label>
+      <input id="quick" class="input" placeholder="输入并回车..." />
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+
+    <div class="row">
+      <label>选择投影显示器</label>
+      <select id="display"></select>
+    </div>
+
+    <div class="row">
+      <label>字体大小</label>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="range" id="fontSize" min="2" max="13" step="1" value="8" style="flex: 1;" />
+        <span id="fontSizeValue">8vh</span>
+      </div>
+    </div>
+
+    <div class="preview-shell">
+      <div class="meta" id="meta"></div>
+      <canvas id="preview" class="preview-frame" style="height: 245px;"></canvas>
+    </div>
+  </div>
+
+  <script src="./control.js"></script>
+</body>
+</html>
