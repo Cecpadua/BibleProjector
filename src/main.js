@@ -10,10 +10,12 @@ const keyboardState = require('keyboard-state');
 let controlWin = null
 let projectorWin = null
 let tray = null
+let originalCapsState = false // 保存原始CAPS LOCK状态
+
 
 const store = new Store({
   defaults: {
-    dbPath: path.join( 'data', 'bible.db'), // 替换为你的实际路径
+    dbPath: path.join(__dirname, '..', 'data', 'bible.db'), // 替换为你的实际路径
     projectorDisplayId: null,
     hotkey: 'Control+Space',
     autoLaunch: true
@@ -63,7 +65,7 @@ function createControlWindow() {
     controlWin = null
   })
   
-  controlWin.loadFile(path.join(__dirname, 'renderer', 'control.html'))
+  controlWin.loadFile(path.join(__dirname, '..', 'renderer', 'control.html'))
   
   // 窗口加载完成后默认显示创世纪1:1-2
   controlWin.webContents.once('did-finish-load', async () => {
@@ -103,7 +105,7 @@ function createProjectorWindow(display) {
     }
   })
   
-  projectorWin.loadFile(path.join(__dirname, 'renderer', 'projector.html'))
+  projectorWin.loadFile(path.join(__dirname, '..', 'renderer', 'projector.html'))
   
   // 确保窗口覆盖任务栏 - Windows 11兼容方法
   projectorWin.once('ready-to-show', () => {
@@ -180,8 +182,8 @@ function destroyProjector() {
 
 function createTray() {
   tray = new Tray(process.platform === 'win32'
-    ? path.join(__dirname, 'icon.ico')
-    : path.join(__dirname, 'icon.png'))
+    ? path.join(__dirname, '..', 'assets', 'icon.ico')
+    : path.join(__dirname, '..', 'assets', 'icon.png'))
   const ctx = Menu.buildFromTemplate([
     { 
       label: '显示控制窗', 

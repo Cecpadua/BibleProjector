@@ -4,15 +4,117 @@
   <meta charset="UTF-8" />
   <title>控制面板</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; }
-    .wrap { width: 400px; border-radius: 10px; background: #ffffffcc; backdrop-filter: blur(6px); box-shadow: 0 8px 30px rgba(0,0,0,.2); overflow: hidden; }
-    header { display:flex; align-items:center; justify-content:space-between; padding: 10px 12px; background:#f3f3f3; -webkit-app-region: drag; }
-    header .btn { border:none; background:#ddd; padding:6px 10px; border-radius:6px; cursor:pointer; -webkit-app-region: no-drag; }
+    body { 
+      margin: 0; 
+      font-family: system-ui, sans-serif; 
+      display: flex; 
+      background: transparent;
+    }
+    .wrap { 
+      width: 400px; 
+      border-radius: 10px; 
+      background: #ffffffcc; 
+      backdrop-filter: blur(6px); 
+      box-shadow: 0 8px 30px rgba(0,0,0,.2); 
+      overflow: hidden; 
+    }
+    .settings-panel {
+      width: 350px;
+      background: #f8f9facc;
+      backdrop-filter: blur(6px);
+      border-radius: 10px;
+      margin-left: 10px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.2);
+      display: none;
+      flex-direction: column;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: #e9ecef;
+      border-radius: 10px 10px 0 0;
+    }
+    .settings-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-reset {
+      background: #dc3545;
+      color: white;
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .btn-reset:hover {
+      background: #c82333;
+    }
+    .settings-content {
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .setting-group {
+      margin-bottom: 16px;
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .setting-group h4 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: #495057;
+    }
+    .setting-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .setting-item:last-child {
+      margin-bottom: 0;
+    }
+    .setting-label {
+      min-width: 80px;
+      font-size: 12px;
+      color: #666;
+    }
+    .setting-control {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .setting-value {
+      min-width: 40px;
+      font-size: 12px;
+      color: #495057;
+      text-align: right;
+    }
+    header { 
+      display:flex; 
+      align-items:center; 
+      justify-content:space-between; 
+      padding: 10px 12px; 
+      background:#f3f3f3; 
+      -webkit-app-region: drag; 
+    }
+    header .btn { 
+      border:none; 
+      background:#ddd; 
+      padding:6px 10px; 
+      border-radius:6px; 
+      cursor:pointer; 
+      -webkit-app-region: no-drag; 
+    }
     header strong { -webkit-app-region: no-drag; }
     .row { padding: 8px 12px; }
-    .input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius:6px; font-size: 14px; }
+    .input { width: 100%; padding: 8px 0px; border: 1px solid #ccc; border-radius:6px; font-size: 14px; }
     .buttons { display:flex; gap:8px; -webkit-app-region: no-drag; }
     .btn-primary { background:#1e90ff; color:#fff; }
+    .btn-settings { background:#6c757d; color:#fff; }
     .preview-shell { padding: 8px 12px; }
     .preview-frame { width: 100%; background:#111; border-radius:8px; display: block; }
     .meta { color:#bbb; font-size: 12px; padding:4px 0; margin-bottom: 8px; }
@@ -26,6 +128,80 @@
     .suggestion-py { font-weight: bold; color: #1e90ff; }
     .suggestion-name { margin-left: 8px; }
     .suggestion-range { color: #666; margin-left: 4px; }
+    
+    /* 设置控件样式 */
+    input[type="range"] {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: #ddd;
+      outline: none;
+    }
+    input[type="color"] {
+      width: 30px;
+      height: 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    
+    /* 录制按钮样式 */
+    .btn-record {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      min-width: 40px;
+    }
+    .btn-record:hover {
+      background: #218838;
+    }
+    .btn-record.recording {
+      background: #dc3545;
+      animation: pulse 1s infinite;
+    }
+    .btn-record.recording:hover {
+      background: #c82333;
+    }
+    
+    /* 录制动画 */
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    
+    /* 快捷键输入框样式 */
+    .setting-control input[type="text"] {
+      flex: 1;
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      background: #f8f9fa;
+    }
+    
+    .setting-control input[type="text"]:focus {
+      outline: none;
+      border-color: #007bff;
+      background: white;
+    }
+    
+    /* 搜索框禁用状态 */
+    #quick:disabled {
+      background: #e9ecef;
+      color: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
   </style>
 </head>
 <body>
@@ -33,14 +209,15 @@
     <header>
       <strong>控制面板</strong>
       <div class="buttons">
-        <button id="btnToggle" class="btn btn-primary">开始投影</button>
+        <button id="btnSettings" class="btn btn-settings">设置</button>
+        <button id="btnToggle" class="btn btn-primary">开始投影 (F9)</button>
         <button id="btnExit" class="btn">退出</button>
       </div>
     </header>
 
     <div class="row">
-      <label>快捷输入（如：CSJ1 12-16 / CSJ 1:12）</label>
-      <input id="quick" class="input" placeholder="输入并回车..." />
+      <label>快捷输入（如：CSJ 1 12 16）</label>
+      <input id="quick" class="input" placeholder="输入并回车..." disabled inputmode="latin" pattern="[A-Za-z0-9]*" />
       <div id="suggestions" class="suggestions"></div>
     </div>
 
@@ -49,7 +226,7 @@
       <select id="display"></select>
     </div>
 
-    <div class="row">
+    <div class="row" style="display: none;">
       <label>字体大小</label>
       <div style="display: flex; align-items: center; gap: 8px;">
         <input type="range" id="fontSize" min="2" max="13" step="1" value="8" style="flex: 1;" />
@@ -63,6 +240,113 @@
     </div>
   </div>
 
-  <script src="./control.js"></script>
+  <!-- 设置面板 -->
+  <div id="settingsPanel" class="settings-panel">
+    <div class="settings-header">
+      <strong>设置</strong>
+      <div class="settings-actions">
+        <button id="btnResetSettings" class="btn btn-reset">重置</button>
+        <button id="btnCloseSettings" class="btn">×</button>
+      </div>
+    </div>
+    <div class="settings-content">
+      <!-- 显示设置 -->
+      <div class="setting-group">
+        <h4>显示设置</h4>
+        <div class="setting-item">
+          <span class="setting-label">字体大小</span>
+          <div class="setting-control">
+            <input type="range" id="settingFontSize" min="2" max="13" step="1" value="8" />
+            <span id="settingFontSizeValue" class="setting-value">8vh</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">文字颜色</span>
+          <div class="setting-control">
+            <input type="color" id="settingTextColor" value="#ffffff" />
+            <span id="settingTextColorValue" class="setting-value">#ffffff</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">背景颜色</span>
+          <div class="setting-control">
+            <input type="color" id="settingBackgroundColor" value="#000000" />
+            <span id="settingBackgroundColorValue" class="setting-value">#000000</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">高亮背景</span>
+          <div class="setting-control">
+            <input type="color" id="settingHighlightBgColor" value="#1e90ff" />
+            <span id="settingHighlightBgColorValue" class="setting-value">#1e90ff</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">高亮文字</span>
+          <div class="setting-control">
+            <input type="color" id="settingHighlightTextColor" value="#ffff00" />
+            <span id="settingHighlightTextColorValue" class="setting-value">#ffff00</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">滚轮速度</span>
+          <div class="setting-control">
+            <input type="range" id="settingScrollSpeed" min="0.1" max="1.0" step="0.1" value="0.4" />
+            <span id="settingScrollSpeedValue" class="setting-value">0.4</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">固定标题</span>
+          <div class="setting-control">
+            <input type="checkbox" id="settingFixedTitle" checked />
+            <span id="settingFixedTitleValue" class="setting-value">开启</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">行高比例</span>
+          <div class="setting-control">
+            <input type="range" id="settingLineHeight" min="0.5" max="2.0" step="0.1" value="1.6" />
+            <span id="settingLineHeightValue" class="setting-value">1.6</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 快捷键设置 -->
+      <div class="setting-group">
+        <h4>快捷键设置</h4>
+        <div class="setting-item">
+          <span class="setting-label">上一个经文</span>
+          <div class="setting-control">
+            <input type="text" id="settingPrevVerse" value="ArrowUp" readonly />
+            <button class="btn-record" data-target="settingPrevVerse">录制</button>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">下一个经文</span>
+          <div class="setting-control">
+            <input type="text" id="settingNextVerse" value="ArrowDown" readonly />
+            <button class="btn-record" data-target="settingNextVerse">录制</button>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">投屏</span>
+          <div class="setting-control">
+            <input type="text" id="settingProject" value="F9" readonly />
+            <button class="btn-record" data-target="settingProject">录制</button>
+          </div>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">显示控制面板</span>
+          <div class="setting-control">
+            <input type="text" id="settingShowControl" value="Control+Space" readonly />
+            <button class="btn-record" data-target="settingShowControl">录制</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./key-recorder.js"></script>
+  <script type="module" src="./control.js"></script>
 </body>
 </html>

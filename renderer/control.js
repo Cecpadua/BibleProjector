@@ -1,13 +1,48 @@
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS } from "./common.js"
+
 // control.js - Canvas版本
 const quick = document.getElementById('quick')
 const preview = document.getElementById('preview') // Canvas元素
 const meta = document.getElementById('meta')
 const btnToggle = document.getElementById('btnToggle')
 const btnExit = document.getElementById('btnExit')
+const btnSettings = document.getElementById('btnSettings')
+const btnCloseSettings = document.getElementById('btnCloseSettings')
+const btnResetSettings = document.getElementById('btnResetSettings')
+const settingsPanel = document.getElementById('settingsPanel')
 const selDisplay = document.getElementById('display')
 const suggestions = document.getElementById('suggestions')
 const fontSize = document.getElementById('fontSize')
 const fontSizeValue = document.getElementById('fontSizeValue')
+
+// 设置控件引用
+const settingFontSize = document.getElementById('settingFontSize')
+const settingFontSizeValue = document.getElementById('settingFontSizeValue')
+const settingTextColor = document.getElementById('settingTextColor')
+const settingTextColorValue = document.getElementById('settingTextColorValue')
+const settingBackgroundColor = document.getElementById('settingBackgroundColor')
+const settingBackgroundColorValue = document.getElementById('settingBackgroundColorValue')
+const settingHighlightBgColor = document.getElementById('settingHighlightBgColor')
+const settingHighlightBgColorValue = document.getElementById('settingHighlightBgColorValue')
+const settingHighlightTextColor = document.getElementById('settingHighlightTextColor')
+const settingHighlightTextColorValue = document.getElementById('settingHighlightTextColorValue')
+const settingScrollSpeed = document.getElementById('settingScrollSpeed')
+const settingScrollSpeedValue = document.getElementById('settingScrollSpeedValue')
+const settingFixedTitle = document.getElementById('settingFixedTitle')
+const settingFixedTitleValue = document.getElementById('settingFixedTitleValue')
+const settingLineHeight = document.getElementById('settingLineHeight')
+const settingLineHeightValue = document.getElementById('settingLineHeightValue')
+
+const settingPrevVerse = document.getElementById('settingPrevVerse')
+const settingNextVerse = document.getElementById('settingNextVerse')
+const settingSelectVerse = document.getElementById('settingSelectVerse')
+const settingProject = document.getElementById('settingProject')
+const settingShowControl = document.getElementById('settingShowControl')
+
+// 按键记录器实例
+let keyRecorder = null
+let isKeyRecording = false
+
 
 let projectorRunning = false
 let aspect = 16/9 // 默认比例
@@ -16,6 +51,7 @@ let currentData = null
 let currentFontSize = 8 // 与HTML中的默认值保持一致
 let previewScrollOffset = 0
 let highlightedVerse = -1 // 当前高亮的经文索引，-1表示无高亮
+
 
 // 动画和双击检测相关
 let lastKeyPressTime = 0
@@ -31,6 +67,11 @@ let isScrolling = false
 
 // Canvas相关
 let ctx // 定义为变量而不是常量
+async function loadDisplays() {
+  const arr = await window.api.displays()
+  selDisplay.innerHTML = arr.map(d => `<option value="${d.id}">${d.label}</option>`).join('')
+  if (arr.length) setPreviewAspect(arr[0].width, arr[0].height)
+}
 
 function setPreviewAspect(w, h) {
   aspect = w / h
@@ -44,118 +85,11 @@ function setPreviewAspect(w, h) {
 }
 
 // 设置预览Canvas尺寸
-function setupPreviewCanvas() {
-  const rect = preview.getBoundingClientRect()
-  const dpr = window.devicePixelRatio || 1
-  
-  preview.width = rect.width * dpr
-  preview.height = rect.height * dpr
-  
-  // 重新获取context并设置缩放
-  ctx = preview.getContext('2d')
-  ctx.scale(dpr, dpr)
-  
-  // 设置与投影相同的文本渲染属性
-  ctx.textRendering = 'optimizeLegibility'
-  ctx.fontKerning = 'normal'
-  
-  renderPreviewContent()
-}
+const setupPreviewCanvas = () => SC(preview, ctx, renderPreviewContent)
 
 // 渲染预览内容（与投影窗口相同的渲染逻辑）
-function renderPreviewContent() {
-  if (!currentData || !ctx) return
-  
-  const rect = preview.getBoundingClientRect()
-  ctx.clearRect(0, 0, rect.width, rect.height)
-  
-  // 设置字体和颜色 - 确保与projector.js完全一致
-  const fontSizePx = (currentFontSize / 100) * rect.height // 将vh转换为px
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  
-  const padding = rect.width * 0.06 // 6vw
-  const paddingTop = rect.height * 0.04 // 4vh
-  let y = paddingTop - previewScrollOffset
-  
-  // 渲染标题
-  const { meta: metaData, verses } = currentData
-  const metaText = `${metaData.book} 第${metaData.chapter}章 ${metaData.range[0]}-${metaData.range[1]}`
-  
-  ctx.fillStyle = '#bbbbbb'
-  ctx.font = `${fontSizePx * 0.7}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillText(metaText, padding, y)
-  y += fontSizePx * 0.7 * 1.6 + rect.height * 0.01 // 1vh margin
-  
-  // 渲染经文
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  const lineHeight = fontSizePx * 1.6
-  const maxWidth = Math.floor(rect.width - padding * 2) // 向下取整确保一致性
-  
-  console.log(`PREVIEW: Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}`)
-  
-  verses.forEach((verse, verseIndex) => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    
-    // 完全统一的文本换行算法
-    const lines = wrapText(ctx, text, maxWidth)
-    
-    // 计算当前经文的总高度
-    const verseHeight = lines.length * lineHeight
-    const verseStartY = y
-    
-    // 如果当前经文被高亮，绘制背景
-    if (highlightedVerse === verseIndex) {
-      ctx.fillStyle = 'rgba(30, 144, 255, 0.3)' // 蓝色半透明背景
-      ctx.fillRect(padding - 5, verseStartY - 5, rect.width - padding * 2 + 10, verseHeight + 10)
-    }
-    
-    // 设置文本颜色
-    ctx.fillStyle = highlightedVerse === verseIndex ? '#ffff00' : '#ffffff' // 高亮时为黄色，否则为白色
-    
-    // 渲染每一行
-    lines.forEach(lineText => {
-      if (y >= -lineHeight && y <= rect.height) { // 只渲染可见的行
-        ctx.fillText(lineText, padding, y)
-      }
-      y += lineHeight
-    })
-    
-    y += fontSizePx * 0.2 // verse间距
-  })
-  
-  // 在底部添加额外空行以确保完全显示
-  y += lineHeight * 3 // 添加3行额外空间
-}
+const renderPreviewContent = () => renderCanvasContent({ ctx, currentData, highlightedVerse, canvasElement: preview, scrollOffsetValue: previewScrollOffset })
 
-// 统一的文本换行函数 - 更保守的换行策略
-function wrapText(ctx, text, maxWidth) {
-  const words = text.split('')
-  let line = ''
-  let lines = []
-  
-  for (let i = 0; i < words.length; i++) {
-    const testLine = line + words[i]
-    const metrics = ctx.measureText(testLine)
-    const width = metrics.width
-    
-    // 使用更保守的阈值，为投影窗口预留更多空间
-    if (width > (maxWidth * 0.98) && line !== '') { // 98%的宽度作为阈值
-      lines.push(line)
-      line = words[i]
-    } else {
-      line = testLine
-    }
-  }
-  if (line !== '') {
-    lines.push(line)
-  }
-  
-  return lines
-}
 
 // 平滑滚动到目标位置（恢复丝滑效果）
 function smoothScrollTo(targetOffset) {
@@ -221,7 +155,7 @@ function syncScrollToProjector() {
   const fontSizePx = (currentFontSize / 100) * rect.height
   const lineHeight = fontSizePx * 1.6
   const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
   
   let contentHeight = paddingTop + titleHeight
   const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
@@ -463,21 +397,15 @@ function selectSuggestion(index) {
   }
 }
 
-quick.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    doSearch(quick.value)
-  } else if (e.key === 'Escape') {
-    hideSuggestions()
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    const items = suggestions.querySelectorAll('.suggestion-item')
-    if (items.length > 0) {
-      items[0].click()
-    }
-  }
-})
 
 quick.addEventListener('input', (e) => {
+  // 检查是否正在录制按键
+  if (isKeyRecording) {
+    e.stopPropagation()
+    e.preventDefault()
+    return
+  }
+  
   const input = e.target.value
   if (input.length > 0) {
     const parts = input.split(/\s+/)
@@ -548,7 +476,7 @@ preview.addEventListener('wheel', (e) => {
   const paddingTop = rect.height * 0.04
   
   // 计算标题高度
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
   // 计算所有经文的高度
   let contentHeight = paddingTop + titleHeight
@@ -571,9 +499,8 @@ preview.addEventListener('wheel', (e) => {
   // 计算最大滚动距离
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
-  // 计算目标滚动位置（可调节滚动敏感度）
-  const scrollSpeed = 0.4 // 降低滚动敏感度，减少每次偏移量 (0.1-1.0之间调节，越小越精细)
-  let targetOffset = previewScrollOffset + e.deltaY * scrollSpeed
+  // 计算目标滚动位置（使用用户设置的滚轮速度）
+  let targetOffset = previewScrollOffset + e.deltaY * userSettings.scrollSpeed
   targetOffset = Math.max(0, Math.min(maxScroll, targetOffset))
   
   // 使用平滑滚动提供丝滑体验
@@ -596,14 +523,9 @@ btnToggle.addEventListener('click', async () => {
 })
 
 // 退出
-btnExit.addEventListener('click', () => window.close())
+btnExit.addEventListener('click', () => window.api.hide())
 
-// 显示器列表
-async function loadDisplays() {
-  const arr = await window.api.displays()
-  selDisplay.innerHTML = arr.map(d => `<option value="${d.id}">${d.label}</option>`).join('')
-  if (arr.length) setPreviewAspect(arr[0].width, arr[0].height)
-}
+
 
 selDisplay.addEventListener('change', async () => {
   const id = Number(selDisplay.value)
@@ -698,21 +620,13 @@ function animateHighlight(fromIndex, toIndex) {
   isAnimating = true
   const startTime = Date.now()
   
+  // 立即通知投影窗口开始动画
+  window.api.highlightVerse({ fromIndex, toIndex, isAnimation: true })
+  
   function animate() {
     const elapsed = Date.now() - startTime
     const progress = Math.min(elapsed / animationDuration, 1)
-    
-    // 使用更平滑的easeInOut缓动函数
-    const easedProgress = progress < 0.5 
-      ? 2 * progress * progress 
-      : -1 + (4 - 2 * progress) * progress
-    
-    // 直接在两个高亮之间平滑过渡，不消失
-    const blendedIndex = fromIndex + (toIndex - fromIndex) * easedProgress
-    
-    // 渲染混合状态
-    renderBlendedHighlight(fromIndex, toIndex, easedProgress)
-    
+
     if (progress < 1) {
       requestAnimationFrame(animate)
     } else {
@@ -721,7 +635,7 @@ function animateHighlight(fromIndex, toIndex) {
       highlightedVerse = toIndex
       renderPreviewContent()
       
-      // 同步到投影窗口
+      // 通知投影窗口动画完成
       window.api.highlightVerse(toIndex)
       
       // 自动滚动到高亮经文
@@ -732,100 +646,23 @@ function animateHighlight(fromIndex, toIndex) {
   animate()
 }
 
-// 渲染混合高亮状态
-function renderBlendedHighlight(fromIndex, toIndex, progress) {
-  if (!currentData || !ctx) return
-  
-  const rect = preview.getBoundingClientRect()
-  ctx.clearRect(0, 0, rect.width, rect.height)
-  
-  // 设置字体和颜色 - 确保与projector.js完全一致
-  const fontSizePx = (currentFontSize / 100) * rect.height // 将vh转换为px
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  
-  const padding = rect.width * 0.06 // 6vw
-  const paddingTop = rect.height * 0.04 // 4vh
-  let y = paddingTop - previewScrollOffset
-  
-  // 渲染标题
-  const { meta: metaData, verses } = currentData
-  const metaText = `${metaData.book} 第${metaData.chapter}章 ${metaData.range[0]}-${metaData.range[1]}`
-  
-  ctx.fillStyle = '#bbbbbb'
-  ctx.font = `${fontSizePx * 0.7}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillText(metaText, padding, y)
-  y += fontSizePx * 0.7 * 1.6 + rect.height * 0.01 // 1vh margin
-  
-  // 渲染经文
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  const lineHeight = fontSizePx * 1.6
-  const maxWidth = Math.floor(rect.width - padding * 2) // 向下取整确保一致性
-  
-  verses.forEach((verse, verseIndex) => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    
-    // 完全统一的文本换行算法
-    const lines = wrapText(ctx, text, maxWidth)
-    
-    // 计算当前经文的总高度
-    const verseHeight = lines.length * lineHeight
-    const verseStartY = y
-    
-    // 计算高亮强度
-    let highlightIntensity = 0
-    if (verseIndex === fromIndex) {
-      highlightIntensity = 1 - progress // 旧高亮淡出
-    } else if (verseIndex === toIndex) {
-      highlightIntensity = progress // 新高亮淡入
-    }
-    
-    // 如果有高亮效果，绘制背景
-    if (highlightIntensity > 0) {
-      ctx.fillStyle = `rgba(30, 144, 255, ${0.3 * highlightIntensity})` // 根据强度调整透明度
-      ctx.fillRect(padding - 5, verseStartY - 5, rect.width - padding * 2 + 10, verseHeight + 10)
-    }
-    
-    // 设置文本颜色（平滑过渡）
-    if (highlightIntensity > 0) {
-      // 从白色到黄色的过渡
-      const r = Math.round(255)
-      const g = Math.round(255)
-      const b = Math.round(255 * (1 - highlightIntensity))
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-    } else {
-      ctx.fillStyle = '#ffffff'
-    }
-    
-    // 渲染每一行
-    lines.forEach(lineText => {
-      if (y >= -lineHeight && y <= rect.height) { // 只渲染可见的行
-        ctx.fillText(lineText, padding, y)
-      }
-      y += lineHeight
-    })
-    
-    y += fontSizePx * 0.2 // verse间距
-  })
-  
-  // 在底部添加额外空行以确保完全显示
-  y += lineHeight * 3 // 添加3行额外空间
-}
-
 // 滚动到指定经文
 function scrollToVerse(verseIndex) {
   if (!currentData || verseIndex < 0 || verseIndex >= currentData.verses.length) return
   
   const rect = preview.getBoundingClientRect()
-  const fontSizePx = (currentFontSize / 100) * rect.height
+  const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
   const lineHeight = fontSizePx * 1.6
   const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
   
-  let targetY = paddingTop + titleHeight
+  // 计算内容开始位置，根据固定标题设置
+  let targetY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
+  
+  // 如果不是固定标题模式，需要加上标题的高度
+  if (!userSettings.fixedTitle) {
+    targetY += titleHeight
+  }
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
@@ -842,9 +679,13 @@ function scrollToVerse(verseIndex) {
     targetY += lines.length * lineHeight + fontSizePx * 0.2
   }
   
-  // 设置滚动位置使目标经文在屏幕中央
-  const centerOffset = rect.height / 3
-  const targetScrollOffset = Math.max(0, targetY - centerOffset)
+  // 设置滚动位置使目标经文在可见区域的合适位置
+  // 如果是固定标题模式，要确保不滚动到标题区域之上
+  const contentStartY = userSettings.fixedTitle ? (paddingTop + titleHeight) : 0
+  const availableHeight = userSettings.fixedTitle ? (rect.height - contentStartY) : rect.height
+  const centerOffset = availableHeight / 3
+  
+  const targetScrollOffset = Math.max(0, targetY - contentStartY - centerOffset)
   
   // 使用平滑滚动提供丝滑体验
   smoothScrollTo(targetScrollOffset)
@@ -856,12 +697,19 @@ preview.addEventListener('click', (e) => {
   
   const rect = preview.getBoundingClientRect()
   const clickY = e.clientY - rect.top + previewScrollOffset
-  const fontSizePx = (currentFontSize / 100) * rect.height
+  const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
   const lineHeight = fontSizePx * 1.6
   const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
-  let currentY = paddingTop + titleHeight
+  // 计算内容开始位置，根据固定标题设置
+  let currentY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
+  
+  // 如果不是固定标题模式，需要加上标题的高度
+  if (!userSettings.fixedTitle) {
+    currentY += titleHeight
+  }
+  
   const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
   
   // 临时创建canvas context来测量文本
@@ -892,11 +740,18 @@ preview.addEventListener('click', (e) => {
   }
   
   // 如果点击的不是任何经文，取消高亮
-  highlightVerse(-1)
+ // highlightVerse(-1)
 })
 
 // 键盘导航（支持双击检测和下一段跳转）
 document.addEventListener('keydown', (e) => {
+  // 检查是否正在录制按键
+  if (isKeyRecording) {
+    e.stopPropagation()
+    e.preventDefault()
+    return
+  }
+  
   if (!currentData || isAnimating) return
   
   // 只在没有焦点在输入框时处理键盘事件
@@ -913,7 +768,7 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault()
       if (isDoubleClick) {
         // 双击上键：跳到上一段的开始
-        jumpToPreviousParagraph()
+        //jumpToPreviousParagraph()
       } else {
         // 单击上键：上一节
         if (highlightedVerse > 0) {
@@ -946,44 +801,7 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// 跳到下一段的开始
-function jumpToNextParagraph() {
-  if (!currentData || highlightedVerse === -1) return
-  
-  const currentVerse = highlightedVerse
-  let nextParagraphStart = -1
-  
-  // 查找下一段的开始（通常以诗篇的分段或章节的自然分段）
-  // 这里简化为每10节为一段，你可以根据实际需要调整
-  const currentParagraph = Math.floor(currentVerse / 10)
-  const nextParagraph = currentParagraph + 1
-  nextParagraphStart = nextParagraph * 10
-  
-  // 确保不超出范围
-  if (nextParagraphStart < currentData.verses.length) {
-    highlightVerse(nextParagraphStart, true)
-  }
-}
 
-// 跳到上一段的开始
-function jumpToPreviousParagraph() {
-  if (!currentData || highlightedVerse === -1) return
-  
-  const currentVerse = highlightedVerse
-  let previousParagraphStart = -1
-  
-  // 查找上一段的开始
-  const currentParagraph = Math.floor(currentVerse / 10)
-  const previousParagraph = Math.max(0, currentParagraph - 1)
-  previousParagraphStart = previousParagraph * 10
-  
-  // 如果已经在段落开始，跳到更前面的段落
-  if (previousParagraphStart === currentVerse && previousParagraph > 0) {
-    previousParagraphStart = (previousParagraph - 1) * 10
-  }
-  
-  highlightVerse(previousParagraphStart, true)
-}
 
 // 追加下一节经文
 async function appendNextVerse() {
@@ -994,10 +812,7 @@ async function appendNextVerse() {
   
   try {
     console.log(`尝试获取下一节: ${meta.py} ${meta.chapter} ${currentMaxVerse + 1}`)
-    
-    // 获取下一节经文
     const nextVerseResult = await window.api.getNextVerse(meta.py, meta.chapter, currentMaxVerse)
-    
     if (nextVerseResult.error) {
       console.log('已经是本章最后一节，不追加')
       return
@@ -1047,3 +862,425 @@ async function appendNextVerse() {
     console.error('追加下一节失败:', error)
   }
 }
+
+
+
+// 设置面板功能
+function toggleSettingsPanel() {
+  const isVisible = settingsPanel.style.display === 'block'
+  
+  if (isVisible) {
+    // 隐藏设置面板
+    settingsPanel.style.display = 'none'
+    btnSettings.textContent = '设置'
+    // 恢复原始窗口宽度
+    window.api.resizeWindow(400, 0)
+  } else {
+    // 显示设置面板
+    settingsPanel.style.display = 'block'
+    btnSettings.textContent = '隐藏'
+    // 扩展窗口宽度以容纳设置面板
+    window.api.resizeWindow(750, 0)
+  }
+}
+
+function closeSettingsPanel() {
+  settingsPanel.style.display = 'none'
+  btnSettings.textContent = '设置'
+  // 恢复原始窗口宽度
+  window.api.resizeWindow(400, 0)
+}
+
+// 应用设置到预览和投影
+function applySetting(key, value) {
+  userSettings[key] = value
+  
+  // 更新当前字体大小变量（向后兼容）
+  if (key === 'fontSize') {
+    currentFontSize = value
+  }
+  
+  // 重新渲染预览
+  renderPreviewContent()
+  
+  // 发送设置到投影窗口
+  window.api.setSetting(key, value)
+}
+
+// 加载保存的设置
+async function loadSettings() {
+  try {
+    const savedSettings = await window.api.getSetting()
+    if (savedSettings) {
+      // 更新本地设置
+      Object.assign(userSettings, savedSettings)
+      
+      // 更新UI控件的值
+      updateSettingsUI()
+      
+      // 更新字体大小变量（向后兼容）
+      currentFontSize = userSettings.fontSize
+      
+      // 重新渲染预览
+      renderPreviewContent()
+      
+      console.log('Settings loaded from disk:', savedSettings)
+    }
+  } catch (error) {
+    console.error('Failed to load settings:', error)
+  }
+}
+
+// 初始化设置控件
+function initializeSettings() {
+  // 字体大小
+  settingFontSize.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value)
+    settingFontSizeValue.textContent = `${value}vh`
+    applySetting('fontSize', value)
+  })
+  
+  // 文字颜色
+  settingTextColor.addEventListener('input', (e) => {
+    const value = e.target.value
+    settingTextColorValue.textContent = value
+    applySetting('textColor', value)
+  })
+  
+  // 背景颜色
+  settingBackgroundColor.addEventListener('input', (e) => {
+    const value = e.target.value
+    settingBackgroundColorValue.textContent = value
+    applySetting('backgroundColor', value)
+  })
+  
+  // 高亮背景颜色
+  settingHighlightBgColor.addEventListener('input', (e) => {
+    const value = e.target.value
+    settingHighlightBgColorValue.textContent = value
+    applySetting('highlightBackgroundColor', value)
+  })
+  
+  // 高亮文字颜色
+  settingHighlightTextColor.addEventListener('input', (e) => {
+    const value = e.target.value
+    settingHighlightTextColorValue.textContent = value
+    applySetting('highlightTextColor', value)
+  })
+  
+  // 滚轮速度
+  settingScrollSpeed.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value)
+    settingScrollSpeedValue.textContent = value.toFixed(1)
+    applySetting('scrollSpeed', value)
+  })
+  
+  // 固定标题设置
+  settingFixedTitle.addEventListener('change', (e) => {
+    const value = e.target.checked
+    settingFixedTitleValue.textContent = value ? '开启' : '关闭'
+    applySetting('fixedTitle', value)
+  })
+
+  // 行高设置
+  settingLineHeight.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value)
+    settingLineHeightValue.textContent = value.toFixed(1)
+    applySetting('lineHeight', value)
+  })
+
+  // 初始化按键记录器
+  initKeyRecorder()
+
+  // 加载保存的设置
+  loadSettings()
+}
+
+// 重置设置为默认值
+async function resetSettings() {
+  // 默认设置值
+
+  
+  // 确认对话框
+  if (confirm('确定要重置所有设置为默认值吗？')) {
+    RS()
+    // 更新UI控件
+    updateSettingsUI()
+    // 先清除旧设置，再逐个保存新设置
+    await clearAndSaveSettings(userSettings)
+    // 应用到预览界面
+    renderPreviewContent()
+    
+    console.log('设置已重置为默认值')
+  }
+}
+
+// 清除旧设置并保存新设置
+async function clearAndSaveSettings(newSettings) {
+  try {
+    // 首先清除所有旧设置
+    await window.api.clearAllSettings()
+    
+    // 然后逐个保存新设置
+    for (const [key, value] of Object.entries(newSettings)) {
+      await window.api.setSetting(key, value)
+      console.log(`Setting ${key} reset to:`, value)
+    }
+    
+    // 批量通知投影窗口
+    window.api.batchUpdateSettings(newSettings)
+    
+    console.log('所有设置已清除并重置')
+  } catch (error) {
+    console.error('重置设置失败:', error)
+  }
+}
+
+// 逐个保存每个设置（确保持久化）
+async function saveAllSettingsIndividually() {
+  try {
+    for (const [key, value] of Object.entries(userSettings)) {
+      await window.api.setSetting(key, value)
+      console.log(`Setting ${key} saved individually:`, value)
+    }
+    console.log('所有设置已逐个保存到store')
+  } catch (error) {
+    console.error('逐个保存设置失败:', error)
+  }
+}
+
+// 保存所有设置到store
+async function saveAllSettings() {
+  try {
+    // 逐个保存每个设置项到store
+    for (const [key, value] of Object.entries(userSettings)) {
+      await window.api.setSetting(key, value)
+    }
+    console.log('所有设置已保存到store')
+  } catch (error) {
+    console.error('保存设置失败:', error)
+  }
+}
+
+// 初始化按键记录器
+function initKeyRecorder() {
+  keyRecorder = new KeyRecorder()
+  
+  // 为所有录制按钮添加事件监听
+  document.querySelectorAll('.btn-record').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const targetInputId = button.getAttribute('data-target')
+      const targetInput = document.getElementById(targetInputId)
+      
+      if (button.classList.contains('recording')) {
+        // 正在录制，停止录制
+        keyRecorder.stopRecording()
+        button.textContent = '录制'
+        button.classList.remove('recording')
+        targetInput.value = '' // 清空输入框
+
+        isKeyRecording = false
+      } else {
+        // 开始录制
+        button.textContent = '按键...'
+        button.classList.add('recording')
+
+        isKeyRecording = true
+        // 禁用输入框
+        quick.disabled = true
+        
+        keyRecorder.startRecording((combination) => {
+          // 录制完成回调
+          targetInput.value = combination
+          button.textContent = '录制'
+          button.classList.remove('recording')
+          isKeyRecording = false
+          // 重新启用输入框
+          quick.disabled = false
+
+          // 保存设置
+          const settingKey = getSettingKeyFromInputId(targetInputId)
+          if (settingKey) {
+            applySetting(settingKey, combination)
+          }
+        })
+      }
+    })
+  })
+}
+
+// 根据输入框ID获取对应的设置键名
+function getSettingKeyFromInputId(inputId) {
+  const mapping = {
+    'settingPrevVerse': 'keyPrevVerse',
+    'settingNextVerse': 'keyNextVerse', 
+    'settingProject': 'keyProject',
+    'settingShowControl': 'keyShowControl'
+  }
+  return mapping[inputId]
+}
+
+// 检查按键是否匹配快捷键
+function isKeyMatch(event, shortcut) {
+  if (!shortcut) return false
+  
+  const keys = shortcut.split('+')
+  const pressedKeys = []
+  
+  // 收集当前按下的修饰键
+  if (event.ctrlKey) pressedKeys.push('Control')
+  if (event.altKey) pressedKeys.push('Alt')
+  if (event.shiftKey) pressedKeys.push('Shift')
+  if (event.metaKey) pressedKeys.push('Meta')
+  
+  // 添加主键
+  if (event.key && !['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+    if (event.key.startsWith('F') && /^F\d+$/.test(event.key)) {
+      pressedKeys.push(event.key)
+    } else if (event.key.startsWith('Arrow')) {
+      pressedKeys.push(event.key)
+    } else if (event.key === ' ') {
+      pressedKeys.push('Space')
+    } else if (event.key.length === 1) {
+      pressedKeys.push(event.key.toUpperCase())
+    } else {
+      pressedKeys.push(event.key)
+    }
+  }
+  
+  // 比较按键组合
+  const currentShortcut = pressedKeys.join('+')
+  return currentShortcut === shortcut
+}
+function updateSettingsUI() {
+  // 更新字体大小
+  settingFontSize.value = userSettings.fontSize
+  settingFontSizeValue.textContent = userSettings.fontSize + 'vh'
+  
+  // 更新文字颜色
+  settingTextColor.value = userSettings.textColor
+  settingTextColorValue.textContent = userSettings.textColor
+  
+  // 更新背景颜色
+  settingBackgroundColor.value = userSettings.backgroundColor
+  settingBackgroundColorValue.textContent = userSettings.backgroundColor
+  
+  // 更新高亮背景颜色
+  settingHighlightBgColor.value = userSettings.highlightBackgroundColor
+  settingHighlightBgColorValue.textContent = userSettings.highlightBackgroundColor
+  
+  // 更新高亮文字颜色
+  settingHighlightTextColor.value = userSettings.highlightTextColor
+  settingHighlightTextColorValue.textContent = userSettings.highlightTextColor
+  
+  // 更新滚轮速度
+  settingScrollSpeed.value = userSettings.scrollSpeed
+  settingScrollSpeedValue.textContent = userSettings.scrollSpeed.toFixed(1)
+  
+  // 更新固定标题
+  settingFixedTitle.checked = userSettings.fixedTitle
+  settingFixedTitleValue.textContent = userSettings.fixedTitle ? '开启' : '关闭'
+
+  // 更新行高
+  settingLineHeight.value = userSettings.lineHeight
+  settingLineHeightValue.textContent = userSettings.lineHeight.toFixed(2)
+  
+  // 更新快捷键设置
+  settingPrevVerse.value = userSettings.keyPrevVerse || 'ArrowUp'
+  settingNextVerse.value = userSettings.keyNextVerse || 'ArrowDown'
+  settingProject.value = userSettings.keyProject || 'F9'
+  settingShowControl.value = userSettings.keyShowControl || 'Control+Space'
+}
+
+// 设置按钮事件监听
+btnSettings.addEventListener('click', toggleSettingsPanel)
+btnCloseSettings.addEventListener('click', closeSettingsPanel)
+btnResetSettings.addEventListener('click', resetSettings)
+
+// 初始化设置
+initializeSettings()
+// 全局键盘事件监听
+document.addEventListener('keydown', (e) => {
+
+  // 检查是否正在录制按键
+  if (isKeyRecording) {
+    e.stopPropagation()
+    e.preventDefault()
+    return
+  }
+
+  // 检查是否匹配用户自定义的快捷键
+  if (isKeyMatch(e, userSettings.keyProject)) {
+    e.preventDefault()
+    btnToggle.click() // 切换投影状态
+    return
+  }
+
+  // 检查上一个经文快捷键
+  if (isKeyMatch(e, userSettings.keyPrevVerse)) {
+    e.preventDefault()
+    if (currentData && highlightedVerse > 0) {
+      highlightVerse(highlightedVerse - 1, true)
+    } else if (currentData && highlightedVerse === -1 && currentData.verses.length > 0) {
+      highlightVerse(currentData.verses.length - 1, true)
+    }
+    return
+  }
+
+  // 检查下一个经文快捷键  
+  if (isKeyMatch(e, userSettings.keyNextVerse)) {
+    e.preventDefault()
+    if (currentData && highlightedVerse < currentData.verses.length - 1) {
+      highlightVerse(highlightedVerse + 1, true)
+    } else if (currentData && highlightedVerse === -1 && currentData.verses.length > 0) {
+      highlightVerse(0, true)
+    }
+    return
+  }
+
+  console.log('Key pressed:', e.key)
+
+  // 如果不是 字母 数字 空格 减号，则屏蔽
+  if (!/^[a-zA-Z0-9 -]$/.test(e.key)) {
+    e.preventDefault()
+  }
+
+  // 处理特殊按键
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (quick.value.trim()) {
+      doSearch(quick.value)
+      quick.value = '' // 清空输入框
+    }
+    return
+  }
+  
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    quick.value = '' // 清空输入框
+    return
+  }
+  
+  if (e.key === 'Backspace') {
+    e.preventDefault()
+    // 删除最后一个字符
+    quick.value = quick.value.slice(0, -1)
+    // 触发input事件来更新建议
+    quick.dispatchEvent(new Event('input', { bubbles: true }))
+    return
+  }
+  
+  // 只处理可打印字符（字母、数字、空格、标点符号等）
+  if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault()
+    
+    // 如果是小写字母，转换为大写（配合自动大写功能）
+    let charToAdd = e.key.toUpperCase()
+
+    // 添加字符到输入框
+    quick.value += charToAdd
+    
+    // 触发input事件来更新建议
+    quick.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+})

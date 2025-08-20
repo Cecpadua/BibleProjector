@@ -1,4 +1,5 @@
-// projector.js
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC } from "./common.js"
+
 const canvas = document.getElementById('projectorCanvas')
 let ctx = canvas.getContext('2d') // 使用let而不是const
 
@@ -19,202 +20,12 @@ let isScrolling = false
 
 console.log('Projector canvas initialized')
 
+
 // 设置Canvas尺寸
-function setupCanvas() {
-  const rect = canvas.getBoundingClientRect()
-  const dpr = window.devicePixelRatio || 1
-  
-  canvas.width = rect.width * dpr
-  canvas.height = rect.height * dpr
-  
-  // 重新获取context以避免累积缩放
-  ctx = canvas.getContext('2d')
-  ctx.scale(dpr, dpr)
-  
-  // 设置相同的文本渲染属性
-  ctx.textRendering = 'optimizeLegibility'
-  ctx.fontKerning = 'normal'
-  
-  console.log(`Canvas setup: ${rect.width}x${rect.height}, DPR: ${dpr}`)
-}
-
+const setupCanvas = () => SC(canvas, ctx, renderContent)
 // 渲染内容
-function renderContent() {
-  if (!currentData) return
-  
-  const rect = canvas.getBoundingClientRect()
-  ctx.clearRect(0, 0, rect.width, rect.height)
-  
-  // 设置字体和颜色
-  const fontSizePx = (fontSize / 100) * rect.height // 将vh转换为px
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  
-  const padding = rect.width * 0.06 // 6vw
-  const paddingTop = rect.height * 0.04 // 4vh
-  let y = paddingTop - scrollOffset
-  
-  // 渲染标题
-  const { meta, verses } = currentData
-  const metaText = `${meta.book} 第${meta.chapter}章 ${meta.range[0]}-${meta.range[1]}`
-  
-  ctx.fillStyle = '#bbbbbb'
-  ctx.font = `${fontSizePx * 0.7}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillText(metaText, padding, y)
-  y += fontSizePx * 0.7 * 1.6 + rect.height * 0.01 // 1vh margin
-  
-  // 渲染经文
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  const lineHeight = fontSizePx * 1.6
-  const maxWidth = Math.floor(rect.width - padding * 2) // 向下取整确保一致性
-  
-  console.log(`PROJECTOR: Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}`)
-  
-  verses.forEach((verse, verseIndex) => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    
-    // 完全统一的文本换行算法
-    const lines = wrapText(ctx, text, maxWidth)
-    
-    // 计算当前经文的总高度
-    const verseHeight = lines.length * lineHeight
-    const verseStartY = y
-    
-    // 如果当前经文被高亮，绘制背景
-    if (highlightedVerse === verseIndex) {
-      ctx.fillStyle = 'rgba(30, 144, 255, 0.3)' // 蓝色半透明背景
-      ctx.fillRect(padding - 5, verseStartY - 5, rect.width - padding * 2 + 10, verseHeight + 10)
-    }
-    
-    // 设置文本颜色
-    ctx.fillStyle = highlightedVerse === verseIndex ? '#ffff00' : '#ffffff' // 高亮时为黄色，否则为白色
-    
-    // 渲染每一行
-    lines.forEach(lineText => {
-      if (y >= -lineHeight && y <= rect.height) { // 只渲染可见的行
-        ctx.fillText(lineText, padding, y)
-      }
-      y += lineHeight
-    })
-    
-    y += fontSizePx * 0.2 // verse间距
-  })
-  
-  // 在底部添加额外空行以确保完全显示
-  y += lineHeight * 3 // 添加3行额外空间
-}
+const renderContent = () => renderCanvasContent({ ctx, currentData, highlightedVerse, canvasElement: canvas, scrollOffsetValue: scrollOffset })
 
-// 渲染混合高亮状态（与control.js保持一致）
-function renderBlendedHighlight(fromIndex, toIndex, progress) {
-  if (!currentData || !ctx) return
-  
-  const rect = canvas.getBoundingClientRect()
-  ctx.clearRect(0, 0, rect.width, rect.height)
-  
-  // 设置字体和颜色
-  const fontSizePx = (fontSize / 100) * rect.height // 将vh转换为px
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  
-  const padding = rect.width * 0.06 // 6vw
-  const paddingTop = rect.height * 0.04 // 4vh
-  let y = paddingTop - scrollOffset
-  
-  // 渲染标题
-  const { meta, verses } = currentData
-  const metaText = `${meta.book} 第${meta.chapter}章 ${meta.range[0]}-${meta.range[1]}`
-  
-  ctx.fillStyle = '#bbbbbb'
-  ctx.font = `${fontSizePx * 0.7}px "Microsoft YaHei", Arial, sans-serif`
-  ctx.fillText(metaText, padding, y)
-  y += fontSizePx * 0.7 * 1.6 + rect.height * 0.01 // 1vh margin
-  
-  // 渲染经文
-  ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  const lineHeight = fontSizePx * 1.6
-  const maxWidth = Math.floor(rect.width - padding * 2) // 向下取整确保一致性
-  
-  verses.forEach((verse, verseIndex) => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    
-    // 完全统一的文本换行算法
-    const lines = wrapText(ctx, text, maxWidth)
-    
-    // 计算当前经文的总高度
-    const verseHeight = lines.length * lineHeight
-    const verseStartY = y
-    
-    // 计算高亮强度
-    let highlightIntensity = 0
-    if (verseIndex === fromIndex) {
-      highlightIntensity = 1 - progress // 旧高亮淡出
-    } else if (verseIndex === toIndex) {
-      highlightIntensity = progress // 新高亮淡入
-    }
-    
-    // 如果有高亮效果，绘制背景
-    if (highlightIntensity > 0) {
-      ctx.fillStyle = `rgba(30, 144, 255, ${0.3 * highlightIntensity})` // 根据强度调整透明度
-      ctx.fillRect(padding - 5, verseStartY - 5, rect.width - padding * 2 + 10, verseHeight + 10)
-    }
-    
-    // 设置文本颜色（平滑过渡）
-    if (highlightIntensity > 0) {
-      // 从白色到黄色的过渡
-      const r = Math.round(255)
-      const g = Math.round(255)
-      const b = Math.round(255 * (1 - highlightIntensity))
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-    } else {
-      ctx.fillStyle = '#ffffff'
-    }
-    
-    // 渲染每一行
-    lines.forEach(lineText => {
-      if (y >= -lineHeight && y <= rect.height) { // 只渲染可见的行
-        ctx.fillText(lineText, padding, y)
-      }
-      y += lineHeight
-    })
-    
-    y += fontSizePx * 0.2 // verse间距
-  })
-  
-  // 在底部添加额外空行以确保完全显示
-  y += lineHeight * 3 // 添加3行额外空间
-}
-
-// 统一的文本换行函数（与control.js完全相同）- 更保守的换行策略
-function wrapText(ctx, text, maxWidth) {
-  const words = text.split('')
-  let line = ''
-  let lines = []
-  
-  for (let i = 0; i < words.length; i++) {
-    const testLine = line + words[i]
-    const metrics = ctx.measureText(testLine)
-    const width = metrics.width
-    
-    // 使用更保守的阈值，为投影窗口预留更多空间
-    if (width > (maxWidth * 0.98) && line !== '') { // 98%的宽度作为阈值
-      lines.push(line)
-      line = words[i]
-    } else {
-      line = testLine
-    }
-  }
-  if (line !== '') {
-    lines.push(line)
-  }
-  
-  return lines
-}
 
 // 平滑滚动函数（恢复丝滑效果）
 function smoothScrollTo(targetOffset) {
@@ -278,7 +89,7 @@ canvas.addEventListener('wheel', (e) => {
   const paddingTop = rect.height * 0.04
   
   // 计算标题高度
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
   
   // 计算所有经文的高度
   let contentHeight = paddingTop + titleHeight
@@ -319,7 +130,7 @@ canvas.addEventListener('click', (e) => {
   const fontSizePx = (fontSize / 100) * rect.height
   const lineHeight = fontSizePx * 1.6
   const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
   let currentY = paddingTop + titleHeight
   const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
@@ -459,7 +270,7 @@ window.api.onProjectorScroll((percent) => {
   const paddingTop = rect.height * 0.04
   
   // 计算标题高度
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
   // 计算所有经文的高度 - 使用相同的逻辑
   let contentHeight = paddingTop + titleHeight
@@ -482,10 +293,10 @@ window.api.onProjectorScroll((percent) => {
   // 计算最大滚动距离
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
-  // 使用即时滚动 - 添加调试日志
+  // 使用平滑滚动 - 添加调试日志
   const targetOffset = percent * maxScroll
   console.log(`Projector scroll: percent=${percent}, maxScroll=${maxScroll}, targetOffset=${targetOffset}`)
-  instantScrollTo(targetOffset)
+  smoothScrollTo(targetOffset)
 })
 
 // 字体大小变化处理
@@ -495,16 +306,38 @@ window.api.onFontSizeChange((size) => {
   renderContent()
 })
 
-// 经文高亮处理（支持丝滑动画但不触发额外滚动）
-window.api.onVerseHighlight((verseIndex) => {
-  console.log('Received verse highlight:', verseIndex)
+// 经文高亮处理（与控制窗口同步动画）
+window.api.onVerseHighlight((verseData) => {
+  console.log('Received verse highlight:', verseData)
   
-  if (verseIndex !== highlightedVerse) {
-    // 只更新高亮状态，不触发滚动（滚动由控制窗口的滚动同步负责）
-    highlightedVerse = verseIndex
-    renderContent()
-    console.log('Updated highlight to verse:', verseIndex)
+  if (typeof verseData === 'number') {
+    // 旧式接口：直接设置高亮
+    if (verseData !== highlightedVerse) {
+      highlightedVerse = verseData
+      renderContent()
+      console.log('Updated highlight to verse:', verseData)
+    }
+  } else if (verseData && typeof verseData === 'object') {
+    // 新式接口：支持动画
+    const { fromIndex, toIndex, isAnimation } = verseData
+    if (isAnimation) {
+      console.log('Starting highlight animation:', fromIndex, '->', toIndex)
+      animateHighlight(fromIndex, toIndex)
+    } else {
+      // 立即切换
+      highlightedVerse = toIndex
+      renderContent()
+    }
   }
+})
+
+// 高亮动画进度处理（实时同步）
+window.api.onVerseHighlightProgress((progressData) => {
+  if (!progressData) return
+  
+  const { fromIndex, toIndex, progress } = progressData
+  console.log('Received highlight progress:', fromIndex, '->', toIndex, 'progress:', progress)
+  
 })
 
 // 滚动到指定经文（与control.js保持一致）
@@ -515,9 +348,15 @@ function scrollToVerse(verseIndex) {
   const fontSizePx = (fontSize / 100) * rect.height
   const lineHeight = fontSizePx * 1.6
   const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7 * 1.6 + rect.height * 0.01
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
-  let targetY = paddingTop + titleHeight
+  // 计算内容开始位置，根据固定标题设置
+  let targetY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
+  
+  // 如果不是固定标题模式，需要加上标题的高度
+  if (!userSettings.fixedTitle) {
+    targetY += titleHeight
+  }
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
@@ -534,9 +373,13 @@ function scrollToVerse(verseIndex) {
     targetY += lines.length * lineHeight + fontSizePx * 0.2
   }
   
-  // 设置滚动位置使目标经文在屏幕中央
-  const centerOffset = rect.height / 3
-  const targetScrollOffset = Math.max(0, targetY - centerOffset)
+  // 设置滚动位置使目标经文在可见区域的合适位置
+  // 如果是固定标题模式，要确保不滚动到标题区域之上
+  const contentStartY = userSettings.fixedTitle ? (paddingTop + titleHeight) : 0
+  const availableHeight = userSettings.fixedTitle ? (rect.height - contentStartY) : rect.height
+  const centerOffset = availableHeight / 3
+  
+  const targetScrollOffset = Math.max(0, targetY - contentStartY - centerOffset)
   
   // 使用平滑滚动提供丝滑体验
   smoothScrollTo(targetScrollOffset)
@@ -552,14 +395,7 @@ function animateHighlight(fromIndex, toIndex) {
   function animate() {
     const elapsed = Date.now() - startTime
     const progress = Math.min(elapsed / animationDuration, 1)
-    
-    // 使用更平滑的easeInOut缓动函数
-    const easedProgress = progress < 0.5 
-      ? 2 * progress * progress 
-      : -1 + (4 - 2 * progress) * progress
-    
-    // 渲染混合状态
-    renderBlendedHighlight(fromIndex, toIndex, easedProgress)
+
     
     if (progress < 1) {
       requestAnimationFrame(animate)
@@ -588,5 +424,55 @@ currentData = {
   verses: [{ VerseSN: '', strjw: '请在控制面板中输入经文查询' }]
 }
 renderContent()
+
+// 设置变化监听器
+window.api.onSettingsChanged((settingsChange) => {
+  console.log('Projector received settings change:', settingsChange)
+  
+  if (settingsChange.key && settingsChange.value !== undefined) {
+    // 单个设置变化
+    userSettings[settingsChange.key] = settingsChange.value
+    
+    // 如果是字体大小变化，同时更新旧的fontSize变量（向后兼容）
+    if (settingsChange.key === 'fontSize') {
+      fontSize = settingsChange.value
+    }
+    
+    // 重新渲染内容以应用新设置
+    renderContent()
+  } else if (typeof settingsChange === 'object' && !settingsChange.key) {
+    // 批量设置更新（重置功能使用）
+    console.log('Projector received batch settings update:', settingsChange)
+    Object.assign(userSettings, settingsChange)
+    
+    // 同时更新旧的fontSize变量（向后兼容）
+    fontSize = userSettings.fontSize
+    
+    // 重新渲染内容以应用新设置
+    renderContent()
+  }
+})
+
+// 启动时加载保存的设置
+async function loadSavedSettings() {
+  try {
+    const savedSettings = await window.api.getSetting()
+    if (savedSettings) {
+      console.log('Projector loading saved settings:', savedSettings)
+      // 更新设置对象
+      Object.assign(userSettings, savedSettings)
+      // 更新旧的fontSize变量（向后兼容）
+      fontSize = userSettings.fontSize
+      renderContent()
+    }
+  } catch (error) {
+    console.error('Failed to load settings in projector:', error)
+  }
+}
+
+// 在页面加载完成后加载设置
+document.addEventListener('DOMContentLoaded', () => {
+  loadSavedSettings()
+})
 
 console.log('Projector event listeners registered')

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   sendScroll: (percent) => ipcRenderer.send('preview:scroll', percent),
   setFontSize: (size) => ipcRenderer.send('set-font-size', size),
   highlightVerse: (verseIndex) => ipcRenderer.send('verse:highlight', verseIndex),
+  highlightVerseProgress: (progressData) => ipcRenderer.send('verse:highlight-progress', progressData),
   onProjectorContent: (cb) => ipcRenderer.on('projector:content', (_e, p) => cb(p)),
   onProjectorScroll: (cb) => ipcRenderer.on('projector:scroll', (_e, p) => cb(p)),
   onProjectorClosed: (cb) => ipcRenderer.on('projector-closed', (_e) => cb()),
@@ -20,4 +21,23 @@ contextBridge.exposeInMainWorld('api', {
   onFontSizeChange: (cb) => ipcRenderer.on('font-size-changed', (_e, size) => cb(size)),
   onDefaultContent: (cb) => ipcRenderer.on('default-content', (_e, content) => cb(content)),
   onVerseHighlight: (cb) => ipcRenderer.on('verse:highlight', (_e, verseIndex) => cb(verseIndex)),
+  onVerseHighlightProgress: (cb) => ipcRenderer.on('verse:highlight-progress', (_e, progressData) => cb(progressData)),
+  
+  // 新增设置相关API
+  resizeWindow: (width, height) => ipcRenderer.invoke('window:resize', width, height),
+  setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  getSetting: (key) => ipcRenderer.invoke('settings:get', key),
+  onSettingsChanged: (cb) => ipcRenderer.on('settings:changed', (_e, settings) => cb(settings)),
+  batchUpdateSettings: (allSettings) => ipcRenderer.send('settings:batch-update', allSettings),
+  clearAllSettings: () => ipcRenderer.invoke('settings:clear-all'),
+
+  hide: () => ipcRenderer.invoke('window:hide'),
+  openDevTools: () => ipcRenderer.invoke('window:open-dev-tools'),
+  openProjectorDevTools: () => ipcRenderer.invoke('projector:open-dev-tools')
+})
+
+// 添加Caps Lock控制API到electronAPI
+contextBridge.exposeInMainWorld('electronAPI', {
+  enableCapsLock: () => ipcRenderer.send('capslock:enable'),
+  disableCapsLock: () => ipcRenderer.send('capslock:disable'),
 })

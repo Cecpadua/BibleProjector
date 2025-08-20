@@ -1,0 +1,277 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        release_name: CECP 投影系统 ${{ steps.version.outputs.VERSION }}
+        body: |
+          # CECP 投影系统 ${{ steps.version.outputs.VERSION }}
+          
+          ## 📋 功能特性
+          
+          - ✅ 圣经经文投影显示
+          - ✅ 自定义键盘快捷键
+          - ✅ 多屏幕支持
+          - ✅ 文字样式自定义
+          - ✅ 背景图片支持
+          - ✅ 实时预览功能
+          
+          ## 📦 下载说明
+          
+          请根据您的操作系统选择对应的安装包：
+          
+          ### Windows 用户
+          - **推荐**: `CECP-投影-Setup-${{ steps.version.outputs.VERSION }}.exe` (安装版)
+          - **便携版**: `CECP-投影-${{ steps.version.outputs.VERSION }}-win.zip` (免安装)
+          
+          ### macOS 用户
+          - **Intel 芯片**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-x64.dmg`
+          - **Apple Silicon (M1/M2)**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-arm64.dmg`
+          - **通用版**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg`
+          
+          ### Linux 用户
+          - **AppImage** (推荐): `CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage`
+          - **Debian/Ubuntu**: `cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb`
+          - **RedHat/CentOS**: `cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm`
+          
+          ## 🚀 安装指南
+          
+          ### Windows
+          1. 下载 `.exe` 安装包
+          2. 右键选择"以管理员身份运行"
+          3. 按照安装向导完成安装
+          
+          ### macOS
+          1. 下载对应的 `.dmg` 文件
+          2. 双击打开，将应用拖拽到"应用程序"文件夹
+          3. 首次运行时，请在"系统偏好设置" → "安全性与隐私"中允许运行
+          
+          ### Linux
+          #### AppImage 方式
+          ```bash
+          chmod +x CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
+          ./CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
+          ```
+          
+          #### Debian/Ubuntu
+          ```bash
+          sudo dpkg -i cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
+          sudo apt-get install -f  # 如果有依赖问题
+          ```
+          
+          #### RedHat/CentOS/Fedora
+          ```bash
+          sudo rpm -i cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
+          ```
+          
+          ## 🔧 系统要求
+          
+          - **Windows**: Windows 10 或更高版本
+          - **macOS**: macOS 10.13 或更高版本
+          - **Linux**: Ubuntu 18.04+, CentOS 7+, 或其他现代 Linux 发行版
+          
+          ## 📞 技术支持
+          
+          如果您在使用过程中遇到问题，请在 GitHub Issues 中反馈。
+          
+          ---
+          
+          *此版本由 GitHub Actions 自动构建和发布*
+        draft: false
+        prerelease: false
+
+  build:
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: universal
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Extract version
+      id: version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Update version in package.json
+      shell: bash
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        VERSION_NO_V="${VERSION#v}"
+        npm version $VERSION_NO_V --no-git-tag-version
+    
+    - name: Install Linux dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libnss3-dev libatk-bridge2.0-dev libdrm2 libxkbcommon-dev libxcomposite-dev libxdamage-dev libxrandr-dev libgbm-dev libgtk-3-dev
+    
+    - name: Build for Windows
+      if: matrix.platform == 'win'
+      run: npm run build:win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build for macOS
+      if: matrix.platform == 'mac'
+      run: npm run build:mac
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CSC_IDENTITY_AUTO_DISCOVERY: false
+    
+    - name: Build for Linux
+      if: matrix.platform == 'linux'
+      run: npm run build:linux
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: List build output
+      shell: bash
+      run: |
+        echo "Build output directory contents:"
+        ls -la dist/ || echo "No dist directory found"
+        find dist/ -type f -name "*" 2>/dev/null || echo "No files in dist/"
+    
+    # 上传 Windows 构建产物
+    - name: Upload Windows installer
+      if: matrix.platform == 'win'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/CECP-投影 Setup ${{ steps.version.outputs.VERSION }}.exe
+        asset_name: CECP-投影-Setup-${{ steps.version.outputs.VERSION }}.exe
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+    
+    - name: Upload Windows portable
+      if: matrix.platform == 'win'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/CECP-投影 ${{ steps.version.outputs.VERSION }} win-unpacked.zip
+        asset_name: CECP-投影-${{ steps.version.outputs.VERSION }}-win.zip
+        asset_content_type: application/zip
+      continue-on-error: true
+    
+    # 上传 macOS 构建产物
+    - name: Upload macOS DMG
+      if: matrix.platform == 'mac'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/CECP-投影-${{ steps.version.outputs.VERSION }}-universal.dmg
+        asset_name: CECP-投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+    
+    # 上传 Linux 构建产物
+    - name: Upload Linux AppImage
+      if: matrix.platform == 'linux'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
+        asset_name: CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+    
+    - name: Upload Linux DEB
+      if: matrix.platform == 'linux'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
+        asset_name: cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
+        asset_content_type: application/vnd.debian.binary-package
+      continue-on-error: true
+    
+    - name: Upload Linux RPM
+      if: matrix.platform == 'linux'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
+        asset_name: cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
+        asset_content_type: application/x-rpm
+      continue-on-error: true
+    
+    # 上传所有构建产物作为备份
+    - name: Upload all artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.platform }}-${{ matrix.arch }}
+        path: dist/
+        retention-days: 30
