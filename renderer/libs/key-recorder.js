@@ -199,9 +199,4 @@ class KeyRecorder {
   }
 }
 
-// 导出
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = KeyRecorder
-} else {
-  window.KeyRecorder = KeyRecorder
-}
+export default KeyRecorder

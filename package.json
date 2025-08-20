@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "CECP 圣经投影软件",
   "main": "src/main.js",
-  "homepage": "https://github.com/yourusername/cecp-projection",
+  "type": "module",
+  "homepage": "https://github.com/cecpadua/cecp-projection",
   "scripts": {
     "start": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -16,7 +17,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
-    "appId": "com.cecp.bible.projection",
+    "appId": "it.cecp.bible.projection",
     "productName": "CECP 投影",
     "directories": {
       "output": "dist"
@@ -56,7 +57,7 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "uninstallDisplayName": "CECP 投影",
-      "license": "docs/LICENSE.txt",
+      "license": "LICENSE.txt",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CECP 投影"
@@ -125,14 +126,13 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "yourusername",
-      "repo": "cecp-projection"
+      "owner": "Cecpadua",
+      "repo": "BibleProjector"
     }
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "key-state": "^1.0.1",
     "keyboard-state": "^0.1.0",

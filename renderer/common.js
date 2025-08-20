@@ -14,22 +14,8 @@ export let userSettings = {
   keyShowControl: 'Control+Space'
 }
 
-export function resetSettings() {
-  userSettings = {
-    fontSize: 8,
-    textColor: '#ffffff',
-    backgroundColor: '#000000',
-    highlightBackgroundColor: '#1e90ff',
-    highlightTextColor: '#ffff00',
-    scrollSpeed: 0.4,
-    fixedTitle: true,
-    lineHeight: 1.6,
-    // 快捷键设置
-    keyPrevVerse: 'ArrowUp',
-    keyNextVerse: 'ArrowDown',
-    keyProject: 'F9',
-    keyShowControl: 'Control+Space'
-  }
+export async function resetSettings() {
+userSettings = await window.api.getDefaultSettings()
 }
 
 export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, canvasElement, scrollOffsetValue }) {
@@ -67,7 +53,7 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
 
   // 内容起始位置
   let contentStartY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
-  let y = contentStartY - scrollOffsetValue
+  let y = contentStartY + 10 - scrollOffsetValue
 
   if (!userSettings.fixedTitle) {
     ctx.fillStyle = '#bbbbbb'
@@ -94,7 +80,7 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
       const rgba = hexToRgba(userSettings.highlightBackgroundColor, 0.3)
       ctx.fillStyle = rgba
 
-      const highlightStartY = userSettings.fixedTitle ? Math.max(verseStartY - verseStartY * 0.10, contentStartY - contentStartY * 0.1) : verseStartY - verseStartY * 0.1
+      const highlightStartY = userSettings.fixedTitle ? (verseStartY - verseStartY * 0.10) : verseStartY - verseStartY * 0.1
       const highlightHeight = userSettings.fixedTitle ? Math.min(verseHeight, rect.height - highlightStartY) : verseHeight
       ctx.fillRect(padding - 5, highlightStartY, rect.width - padding * 2 + 10, highlightHeight)
     }

@@ -226,6 +226,13 @@
       <select id="display"></select>
     </div>
 
+    <div class="row">
+      <label>历史记录</label>
+      <select id="history"></select>
+    </div>
+
+
+
     <div class="row" style="display: none;">
       <label>字体大小</label>
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -235,7 +242,7 @@
     </div>
 
     <div class="preview-shell">
-      <div class="meta" id="meta"></div>
+      <div class="meta" id="meta" style="display: none;"></div>
       <canvas id="preview" class="preview-frame" style="height: 245px;"></canvas>
     </div>
   </div>
@@ -249,7 +256,7 @@
         <button id="btnCloseSettings" class="btn">×</button>
       </div>
     </div>
-    <div class="settings-content">
+    <div class="settings-content" style="height: 400px;">
       <!-- 显示设置 -->
       <div class="setting-group">
         <h4>显示设置</h4>
@@ -345,8 +352,6 @@
       </div>
     </div>
   </div>
-
-  <script src="./key-recorder.js"></script>
   <script type="module" src="./control.js"></script>
 </body>
 </html>

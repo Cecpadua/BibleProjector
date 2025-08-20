@@ -1,5 +1,5 @@
 import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS } from "./common.js"
-
+import KeyRecorder from "./libs/key-recorder.js"
 // control.js - Canvas版本
 const quick = document.getElementById('quick')
 const preview = document.getElementById('preview') // Canvas元素
@@ -14,6 +14,7 @@ const selDisplay = document.getElementById('display')
 const suggestions = document.getElementById('suggestions')
 const fontSize = document.getElementById('fontSize')
 const fontSizeValue = document.getElementById('fontSizeValue')
+const selHistory = document.getElementById('history')
 
 // 设置控件引用
 const settingFontSize = document.getElementById('settingFontSize')
@@ -43,6 +44,9 @@ const settingShowControl = document.getElementById('settingShowControl')
 let keyRecorder = null
 let isKeyRecording = false
 
+// 历史搜索相关
+let searchHistory = []
+
 
 let projectorRunning = false
 let aspect = 16/9 // 默认比例
@@ -69,8 +73,18 @@ let isScrolling = false
 let ctx // 定义为变量而不是常量
 async function loadDisplays() {
   const arr = await window.api.displays()
+  const projectorDisplayId = await window.api.getSetting('projectorDisplayId')
+  let selectedDisplay = arr[0]
+
+  // 检查 projectorDisplayId 是否有效且在列表中
+  if (projectorDisplayId && arr.some(d => d.id === projectorDisplayId)) {
+    selectedDisplay = arr.find(d => d.id === projectorDisplayId)
+  }
+
   selDisplay.innerHTML = arr.map(d => `<option value="${d.id}">${d.label}</option>`).join('')
-  if (arr.length) setPreviewAspect(arr[0].width, arr[0].height)
+  selDisplay.value = selectedDisplay.id
+
+  if (selectedDisplay) setPreviewAspect(selectedDisplay.width, selectedDisplay.height)
 }
 
 function setPreviewAspect(w, h) {
@@ -147,6 +161,69 @@ function instantScrollTo(targetOffset) {
   syncScrollToProjector()
 }
 
+// 历史搜索管理函数
+async function addToSearchHistory(searchText, payload) {
+  try {
+    const historyItem = {
+      text: searchText.trim(),
+      meta: payload.meta,
+      timestamp: Date.now()
+    }
+    
+    console.log('添加到搜索历史:', historyItem)
+    
+    // 移除重复项（如果存在）
+    searchHistory = searchHistory.filter(item => item.text !== historyItem.text)
+    
+    // 添加到开头
+    searchHistory.unshift(historyItem)
+    
+    // 保持最多10个
+    if (searchHistory.length > 10) {
+      searchHistory = searchHistory.slice(0, 10)
+    }
+    
+    // 保存到store
+    await window.api.setSetting('searchHistory', searchHistory)
+    console.log('搜索历史已保存，当前历史记录数量:', searchHistory.length)
+    
+    // 更新历史下拉框
+    updateHistorySelect()
+  } catch (error) {
+    console.error('添加搜索历史失败:', error)
+  }
+}
+
+async function loadSearchHistory() {
+  try {
+    console.log('加载搜索历史...')
+    const savedHistory = await window.api.getSetting('searchHistory')
+    if (savedHistory && Array.isArray(savedHistory)) {
+      searchHistory = savedHistory
+      console.log('搜索历史已加载，记录数量:', searchHistory.length)
+      updateHistorySelect()
+    } else {
+      console.log('没有找到保存的搜索历史')
+    }
+  } catch (error) {
+    console.error('加载搜索历史失败:', error)
+    searchHistory = []
+  }
+}
+
+function updateHistorySelect() {
+  console.log('更新历史选择框，历史记录数量:', searchHistory.length)
+  selHistory.innerHTML = '<option value="">选择历史记录...</option>'
+  
+  searchHistory.forEach((item, index) => {
+    const option = document.createElement('option')
+    option.value = item.text
+    option.textContent = `${item.meta.book} ${item.meta.chapter}:${item.meta.range[0]}-${item.meta.range[1]}`
+    selHistory.appendChild(option)
+    console.log(`添加历史记录 ${index + 1}: ${option.textContent}`)
+  })
+}
+
 // 同步滚动到投影窗口（独立函数，避免重复计算）
 function syncScrollToProjector() {
   if (!currentData) return
@@ -186,6 +263,7 @@ function renderVerses(payload) {
   previewScrollOffset = 0
   highlightedVerse = -1 // 重置高亮
   renderPreviewContent()
+
   
   // 同步到投影端
   window.api.sendContent(payload)
@@ -197,6 +275,9 @@ async function doSearch(text) {
     const res = await window.api.search(text)
     renderVerses(res)
     hideSuggestions()
+    
+    // 搜索成功后添加到历史记录
+    await addToSearchHistory(text, res)
   } catch (e) {
     meta.textContent = '解析/查询失败：' + e.message
     ctx.clearRect(0, 0, preview.width, preview.height)
@@ -532,6 +613,17 @@ selDisplay.addEventListener('change', async () => {
   await window.api.setDisplay(id)
 })
 
+// 历史记录选择事件
+selHistory.addEventListener('change', async () => {
+  const selectedText = selHistory.value
+  if (selectedText) {
+    quick.value = selectedText
+    await doSearch(selectedText)
+    quick.value = ''
+    selHistory.value = '' // 重置选择
+  }
+})
+
 // 主进程推送的显示信息（当开启投影时）
 window.api.onDisplayInfo((d) => setPreviewAspect(d.width, d.height))
 
@@ -590,6 +682,7 @@ if (document.readyState === 'loading') {
 // 初始化
 loadDisplays()
 setupPreviewCanvas()
+loadSearchHistory()  // 加载搜索历史记录
 
 // 经文高亮函数（支持动画）
 function highlightVerse(verseIndex, withAnimation = false) {
@@ -874,13 +967,13 @@ function toggleSettingsPanel() {
     settingsPanel.style.display = 'none'
     btnSettings.textContent = '设置'
     // 恢复原始窗口宽度
-    window.api.resizeWindow(400, 0)
+    window.api.resizeWindow(400, -1)
   } else {
     // 显示设置面板
     settingsPanel.style.display = 'block'
     btnSettings.textContent = '隐藏'
     // 扩展窗口宽度以容纳设置面板
-    window.api.resizeWindow(750, 0)
+    window.api.resizeWindow(750, -1)
   }
 }
 
@@ -888,7 +981,7 @@ function closeSettingsPanel() {
   settingsPanel.style.display = 'none'
   btnSettings.textContent = '设置'
   // 恢复原始窗口宽度
-  window.api.resizeWindow(400, 0)
+  window.api.resizeWindow(400, -1)
 }
 
 // 应用设置到预览和投影
@@ -1020,15 +1113,15 @@ async function clearAndSaveSettings(newSettings) {
   try {
     // 首先清除所有旧设置
     await window.api.clearAllSettings()
-    
+    const defaultSettings = await window.api.getDefaultSettings()
     // 然后逐个保存新设置
-    for (const [key, value] of Object.entries(newSettings)) {
+    for (const [key, value] of Object.entries(defaultSettings)) {
       await window.api.setSetting(key, value)
       console.log(`Setting ${key} reset to:`, value)
     }
     
     // 批量通知投影窗口
-    window.api.batchUpdateSettings(newSettings)
+    window.api.batchUpdateSettings(defaultSettings)
     
     console.log('所有设置已清除并重置')
   } catch (error) {

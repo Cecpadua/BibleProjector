@@ -1,17 +1,27 @@
 // db.js（使用 sqlite3 模块）
+import { createRequire } from 'module'
+import Logger from './utils/logger.js'
+const require = createRequire(import.meta.url)
 const sqlite3 = require('sqlite3').verbose()
 let db = null
 
 async function initDB(dbPath) {
+  Logger.info('Initializing database:', dbPath)
   return new Promise((resolve, reject) => {
     db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, err => {
-      if (err) reject(err)
-      else resolve()
+      if (err) {
+        Logger.error('Failed to initialize database:', err)
+        reject(err)
+      } else {
+        Logger.info('Database initialized successfully')
+        resolve()
+      }
     })
   })
 }
 
 function closeDB() {
+  Logger.info('Closing database connection')
   if (db) db.close()
 }
 
@@ -89,11 +99,11 @@ function getVerseRange(py, chapter) {
     db.get(`SELECT SN AS VolumeSN FROM bibleid WHERE UPPER(PY)=?`, [py.toUpperCase()], (err, bookRow) => {
       if (err) return reject(err)
       if (!bookRow) return reject(new Error('未找到书卷：' + py))
-      console.log(`查询 ${py} ${chapter} 章的节数范围`)
+      Logger.log(`查询 ${py} ${chapter} 章的节数范围`)
       db.get(`SELECT MAX(CAST(VerseSN AS INT)) as maxVerse FROM bible WHERE VolumeSN = ? AND ChapterSN = ?`, 
         [Number.parseInt(bookRow.VolumeSN), chapter], (err, result) => {
         if (err) return reject(err)
-          console.log(py , " Has ", result ? result.maxVerse : 0)
+          Logger.log(py , " Has ", result ? result.maxVerse : 0)
         resolve({
           maxVerse: result ? result.maxVerse : 0
         })
@@ -106,7 +116,7 @@ function getVersesByRef(input) {
   return new Promise((resolve, reject) => {
     const ref = parseRef(input)
 
-    console.log('查询经文:', ref)
+    Logger.log('查询经文:', ref)
 
     db.get(`SELECT SN AS VolumeSN, FullName, ShortName, ChapterNumber FROM bibleid WHERE UPPER(PY)=?`, [ref.py], (err, bookRow) => {
       if (err) return reject(err)
@@ -117,13 +127,13 @@ function getVersesByRef(input) {
 
       const vFrom = Math.max(1, ref.vFrom)
       const vTo = Math.max(vFrom, ref.vTo)
-      console.log(`查询 ${bookRow.FullName} ${ref.chapter} 章 ${vFrom}-${vTo} 节`)
+      Logger.log(`查询 ${bookRow.FullName} ${ref.chapter} 章 ${vFrom}-${vTo} 节`)
       db.all(`SELECT CAST(id AS INT) as id, VolumeSN, ChapterSN, VerseSN, strjw FROM bible
               WHERE VolumeSN = ? AND ChapterSN = ? AND (VerseSN BETWEEN ? AND ?)
               ORDER BY id ASC`,
         [Number.parseInt(bookRow.VolumeSN), ref.chapter, vFrom, vTo],
         (err, rows) => {
-          console.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
+          Logger.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
           if (err) return reject(err)
           resolve({
             meta: {
@@ -139,4 +149,4 @@ function getVersesByRef(input) {
   })
 }
 
-module.exports = { initDB, closeDB, getVersesByRef, getBookSuggestions, getVerseRange }
+export { initDB, closeDB, getVersesByRef, getBookSuggestions, getVerseRange }

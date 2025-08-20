@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('api', {
   onSettingsChanged: (cb) => ipcRenderer.on('settings:changed', (_e, settings) => cb(settings)),
   batchUpdateSettings: (allSettings) => ipcRenderer.send('settings:batch-update', allSettings),
   clearAllSettings: () => ipcRenderer.invoke('settings:clear-all'),
-
+  getDefaultSettings: () => ipcRenderer.invoke('settings:get-default'),
   hide: () => ipcRenderer.invoke('window:hide'),
   openDevTools: () => ipcRenderer.invoke('window:open-dev-tools'),
   openProjectorDevTools: () => ipcRenderer.invoke('projector:open-dev-tools')
