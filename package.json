@@ -20,8 +20,10 @@
     "appId": "it.cecp.bible.projection",
     "productName": "CECP-Bible-Projection",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
+    "compression": "normal",
     "files": [
       "**/*",
       "!node_modules/**/*",
@@ -51,7 +53,7 @@
           ]
         },
         {
-          "target": "zip",
+          "target": "zip", 
           "arch": [
             "x64"
           ]
@@ -72,7 +74,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "CECP圣经投影",
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [
