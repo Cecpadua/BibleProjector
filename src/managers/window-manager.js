@@ -20,7 +20,7 @@ class WindowManager {
       height: 550,//560,
       frame: false,
       transparent: true,
-      alwaysOnTop: true,
+      // alwaysOnTop: true,
       movable: true,
       resizable: false,
       skipTaskbar: false,
@@ -32,17 +32,25 @@ class WindowManager {
     })
 
     // 添加窗口焦点事件监听
-    this.controlWin.on('focus', () => {
-      // 确保control窗口保持置顶
-      this.controlWin.setAlwaysOnTop(true)
+    // this.controlWin.on('focus', () => {
+    //   // 当控制窗口获得焦点时，确保投影窗口保持全屏状态
+    //   // if (this.projectorWin && !this.projectorWin.isDestroyed()) {
+    //   //   // 强制确保投影窗口保持全屏状态
+    //   //   //this.projectorWin.setFullScreen(true)
+    //   //   //this.projectorWin.setAlwaysOnTop(true, 'screen-saver')
+    //   // }
+    // })
+    
+    // 添加blur事件监听，防止窗口失焦时的异常行为
+    // this.controlWin.on('blur', () => {
+    //   // 保持控制窗口的置顶状态
+    //   this.controlWin.setAlwaysOnTop(true)
       
-      // 确保投影窗口保持全屏和置顶状态
-      if (this.projectorWin && !this.projectorWin.isDestroyed()) {
-        this.projectorWin.setFullScreen(true)
-        this.projectorWin.setAlwaysOnTop(true, 'screen-saver', 1)
-        this.projectorWin.moveTop()
-      }
-    })
+    //   // 确保投影窗口仍然全屏
+    //   if (this.projectorWin && !this.projectorWin.isDestroyed()) {
+    //     this.projectorWin.setFullScreen(true)
+    //   }
+    // })
     
     // 控制窗口关闭时也关闭投影窗口
     this.controlWin.on('closed', () => {
@@ -55,7 +63,7 @@ class WindowManager {
     })
     
     this.controlWin.loadFile(path.join(__dirname, '..', '..', 'renderer', 'control.html'))
-    
+    //this.controlWin.setAlwaysOnTop(true, 'screen-saver');
     return this.controlWin
   }
 
@@ -67,13 +75,12 @@ class WindowManager {
       width: bounds.width,
       height: bounds.height,
       frame: false,
-      fullscreen: false,
+      fullscreen: true, // 直接设置为全屏
       movable: false,
       resizable: false,
-      focusable: true,
+      focusable: true, // 改回true，让投影窗口可以接收键盘事件
       transparent: false,
       alwaysOnTop: true,
-      skipTaskbar: false,
       minimizable: false,
       maximizable: false,
       webPreferences: {
@@ -84,19 +91,33 @@ class WindowManager {
     })
     
     this.projectorWin.loadFile(path.join(__dirname, '..', '..', 'renderer', 'projector.html'))
-    
-    // 确保窗口覆盖任务栏
+    this.projectorWin.setAlwaysOnTop(true, 'screen-saver');
+    // 确保窗口真正全屏覆盖所有内容包括任务栏
     this.projectorWin.once('ready-to-show', () => {
+      // 首先设置到指定显示器的边界
       this.projectorWin.setBounds({
         x: bounds.x,
         y: bounds.y,
         width: bounds.width,
         height: bounds.height
       })
+      
+      // 强制设置全屏模式
       this.projectorWin.setFullScreen(true)
-      this.projectorWin.setAlwaysOnTop(true, 'screen-saver', 1)
-      this.projectorWin.moveTop()
+      
+      // 确保窗口在最顶层
+      this.projectorWin.setAlwaysOnTop(true, 'screen-saver')
+      
+      // 显示窗口
       this.projectorWin.show()
+      
+      // 再次确认全屏设置（有些系统需要延迟设置）
+      setTimeout(() => {
+        if (this.projectorWin && !this.projectorWin.isDestroyed()) {
+          this.projectorWin.setFullScreen(true)
+          this.projectorWin.focus()
+        }
+      }, 100)
 
       Logger.info('Projector window created and shown')
     })
@@ -132,6 +153,9 @@ class WindowManager {
       })
     } else {
       Logger.info('Showing existing projector window for display:', target)
+      // 确保重新显示时也是全屏
+      this.projectorWin.setFullScreen(true)
+      this.projectorWin.setAlwaysOnTop(true, 'screen-saver')
       this.projectorWin.showInactive()
     }
   }

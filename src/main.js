@@ -46,8 +46,12 @@ let ipcHandlers
 
 async function initializeApp() {
   try {
-    // 初始化数据库
-    await initDB(path.join(__dirname, '..', 'data', 'bible.db'))
+    // 初始化数据库 - 从 extraResources 目录访问
+    const dbPath = isDev 
+      ? path.join(__dirname, '..', 'data', 'bible.db')
+      : path.join(process.resourcesPath, 'data', 'bible.db')
+    
+    await initDB(dbPath)
     
     // 创建管理器实例
     windowManager = new WindowManager()
@@ -71,7 +75,7 @@ async function initializeApp() {
         }
       })
        // 开发模式下打开开发者工具
-      controlWin.webContents.openDevTools({ mode: 'detach' })
+      //controlWin.webContents.openDevTools({ mode: 'detach' })
     }
     
    

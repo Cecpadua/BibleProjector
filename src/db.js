@@ -1,28 +1,27 @@
-// db.js（使用 sqlite3 模块）
+// db.js（使用 better-sqlite3 模块）
 import { createRequire } from 'module'
 import Logger from './utils/logger.js'
 const require = createRequire(import.meta.url)
-const sqlite3 = require('sqlite3').verbose()
+const Database = require('better-sqlite3')
 let db = null
 
 async function initDB(dbPath) {
   Logger.info('Initializing database:', dbPath)
-  return new Promise((resolve, reject) => {
-    db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, err => {
-      if (err) {
-        Logger.error('Failed to initialize database:', err)
-        reject(err)
-      } else {
-        Logger.info('Database initialized successfully')
-        resolve()
-      }
-    })
-  })
+  try {
+    db = new Database(dbPath, { readonly: true })
+    Logger.info('Database initialized successfully')
+  } catch (err) {
+    Logger.error('Failed to initialize database:', err)
+    throw err
+  }
 }
 
 function closeDB() {
   Logger.info('Closing database connection')
-  if (db) db.close()
+  if (db) {
+    db.close()
+    db = null
+  }
 }
 
 function parseRef(input) {
@@ -67,86 +66,94 @@ function parseRef(input) {
 
 // 获取书卷提示信息
 function getBookSuggestions(input) {
-  return new Promise((resolve, reject) => {
+  try {
     if (!input) {
       // 如果没有输入，返回所有书卷
-      db.all(`SELECT PY, FullName, ChapterNumber FROM bibleid ORDER BY SN`, (err, rows) => {
-        if (err) return reject(err)
-        resolve(rows.map(row => ({
-          py: row.PY,
-          name: row.FullName,
-          chapters: `1-${row.ChapterNumber}`
-        })))
-      })
+      const stmt = db.prepare(`SELECT PY, FullName, ChapterNumber FROM bibleid ORDER BY SN`)
+      const rows = stmt.all()
+      return Promise.resolve(rows.map(row => ({
+        py: row.PY,
+        name: row.FullName,
+        chapters: `1-${row.ChapterNumber}`
+      })))
     } else {
       // 根据输入的拼音前缀查找匹配的书卷
       const searchPattern = input.toUpperCase() + '%'
-      db.all(`SELECT PY, FullName, ChapterNumber FROM bibleid WHERE UPPER(PY) LIKE ? ORDER BY SN`, [searchPattern], (err, rows) => {
-        if (err) return reject(err)
-        resolve(rows.map(row => ({
-          py: row.PY,
-          name: row.FullName,
-          chapters: `1-${row.ChapterNumber}`
-        })))
-      })
+      const stmt = db.prepare(`SELECT PY, FullName, ChapterNumber FROM bibleid WHERE UPPER(PY) LIKE ? ORDER BY SN`)
+      const rows = stmt.all(searchPattern)
+      return Promise.resolve(rows.map(row => ({
+        py: row.PY,
+        name: row.FullName,
+        chapters: `1-${row.ChapterNumber}`
+      })))
     }
-  })
+  } catch (err) {
+    return Promise.reject(err)
+  }
 }
 
 // 获取指定书卷的章节范围内的节数范围
 function getVerseRange(py, chapter) {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT SN AS VolumeSN FROM bibleid WHERE UPPER(PY)=?`, [py.toUpperCase()], (err, bookRow) => {
-      if (err) return reject(err)
-      if (!bookRow) return reject(new Error('未找到书卷：' + py))
-      Logger.log(`查询 ${py} ${chapter} 章的节数范围`)
-      db.get(`SELECT MAX(CAST(VerseSN AS INT)) as maxVerse FROM bible WHERE VolumeSN = ? AND ChapterSN = ?`, 
-        [Number.parseInt(bookRow.VolumeSN), chapter], (err, result) => {
-        if (err) return reject(err)
-          Logger.log(py , " Has ", result ? result.maxVerse : 0)
-        resolve({
-          maxVerse: result ? result.maxVerse : 0
-        })
-      })
+  try {
+    const bookStmt = db.prepare(`SELECT SN AS VolumeSN FROM bibleid WHERE UPPER(PY)=?`)
+    const bookRow = bookStmt.get(py.toUpperCase())
+    
+    if (!bookRow) {
+      return Promise.reject(new Error('未找到书卷：' + py))
+    }
+    
+    Logger.log(`查询 ${py} ${chapter} 章的节数范围`)
+    const verseStmt = db.prepare(`SELECT MAX(CAST(VerseSN AS INT)) as maxVerse FROM bible WHERE VolumeSN = ? AND ChapterSN = ?`)
+    const result = verseStmt.get(Number.parseInt(bookRow.VolumeSN), chapter)
+    
+    Logger.log(py, " Has ", result ? result.maxVerse : 0)
+    return Promise.resolve({
+      maxVerse: result ? result.maxVerse : 0
     })
-  })
+  } catch (err) {
+    return Promise.reject(err)
+  }
 }
 
 function getVersesByRef(input) {
-  return new Promise((resolve, reject) => {
+  try {
     const ref = parseRef(input)
-
     Logger.log('查询经文:', ref)
 
-    db.get(`SELECT SN AS VolumeSN, FullName, ShortName, ChapterNumber FROM bibleid WHERE UPPER(PY)=?`, [ref.py], (err, bookRow) => {
-      if (err) return reject(err)
-      if (!bookRow) return reject(new Error('未找到书卷：' + ref.py))
-      if (ref.chapter < 1 || ref.chapter > Number(bookRow.ChapterNumber)) {
-        return reject(new Error(`章节超出范围：${ref.chapter}（1-${bookRow.ChapterNumber}）`))
-      }
+    const bookStmt = db.prepare(`SELECT SN AS VolumeSN, FullName, ShortName, ChapterNumber FROM bibleid WHERE UPPER(PY)=?`)
+    const bookRow = bookStmt.get(ref.py)
+    
+    if (!bookRow) {
+      return Promise.reject(new Error('未找到书卷：' + ref.py))
+    }
+    
+    if (ref.chapter < 1 || ref.chapter > Number(bookRow.ChapterNumber)) {
+      return Promise.reject(new Error(`章节超出范围：${ref.chapter}（1-${bookRow.ChapterNumber}）`))
+    }
 
-      const vFrom = Math.max(1, ref.vFrom)
-      const vTo = Math.max(vFrom, ref.vTo)
-      Logger.log(`查询 ${bookRow.FullName} ${ref.chapter} 章 ${vFrom}-${vTo} 节`)
-      db.all(`SELECT CAST(id AS INT) as id, VolumeSN, ChapterSN, VerseSN, strjw FROM bible
-              WHERE VolumeSN = ? AND ChapterSN = ? AND (VerseSN BETWEEN ? AND ?)
-              ORDER BY id ASC`,
-        [Number.parseInt(bookRow.VolumeSN), ref.chapter, vFrom, vTo],
-        (err, rows) => {
-          Logger.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
-          if (err) return reject(err)
-          resolve({
-            meta: {
-              py: ref.py,
-              book: bookRow.FullName,
-              chapter: ref.chapter,
-              range: [vFrom, vTo]
-            },
-            verses: rows
-          })
-        })
+    const vFrom = Math.max(1, ref.vFrom)
+    const vTo = Math.max(vFrom, ref.vTo)
+    Logger.log(`查询 ${bookRow.FullName} ${ref.chapter} 章 ${vFrom}-${vTo} 节`)
+    
+    const verseStmt = db.prepare(`SELECT CAST(id AS INT) as id, VolumeSN, ChapterSN, VerseSN, strjw FROM bible
+            WHERE VolumeSN = ? AND ChapterSN = ? AND (VerseSN BETWEEN ? AND ?)
+            ORDER BY id ASC`)
+    const rows = verseStmt.all(Number.parseInt(bookRow.VolumeSN), ref.chapter, vFrom, vTo)
+    
+    Logger.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
+    
+    return Promise.resolve({
+      meta: {
+        py: ref.py,
+        book: bookRow.FullName,
+        chapter: ref.chapter,
+        range: [vFrom, vTo]
+      },
+      verses: rows
     })
-  })
+  } catch (err) {
+    return Promise.reject(err)
+  }
 }
 
 export { initDB, closeDB, getVersesByRef, getBookSuggestions, getVerseRange }

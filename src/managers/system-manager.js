@@ -54,7 +54,9 @@ class SystemManager {
       if (!controlWin) return
       
       if (controlWin.isVisible()) {
-        controlWin.hide()
+        // move to top
+        controlWin.moveTop()
+        controlWin.focus()
       } else {
         controlWin.show()
       }

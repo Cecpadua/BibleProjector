@@ -2,7 +2,7 @@
   "name": "cecp-projection",
   "version": "1.0.0",
   "description": "CECP 圣经投影软件",
-  "main": "src/main.js",
+  "main": "./src/main.js",
   "type": "module",
   "homepage": "https://github.com/cecpadua/cecp-projection",
   "scripts": {
@@ -14,21 +14,27 @@
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
     "build:all": "electron-builder -mwl",
-    "postinstall": "npx @electron/rebuild"
+    "postinstall": "electron-builder install-app-deps"
   },
   "build": {
     "appId": "it.cecp.bible.projection",
-    "productName": "CECP 投影",
+    "productName": "CECP 圣经投影",
     "directories": {
       "output": "dist"
     },
     "files": [
       "**/*",
       "!node_modules/**/*",
-      "node_modules/sqlite3/**/*",
-      "node_modules/robotjs/**/*",
-      "node_modules/keyboard-state/**/*",
-      "node_modules/key-state/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*",
+      "node_modules/chalk/**/*",
+      "node_modules/ansi-styles/**/*",
+      "node_modules/supports-color/**/*",
+      "node_modules/has-flag/**/*",
+      "node_modules/color-convert/**/*",
+      "node_modules/color-name/**/*",
+      "node_modules/robotjs/**/*"
     ],
     "extraResources": [
       {
@@ -62,11 +68,11 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "uninstallDisplayName": "CECP 投影",
+      "uninstallDisplayName": "CECP 圣经投影",
       "license": "LICENSE.txt",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CECP 投影"
+      "shortcutName": "CECP 圣经投影"
     },
     "mac": {
       "target": [
@@ -93,7 +99,7 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "dmg": {
-      "title": "CECP 投影",
+      "title": "CECP 圣经投影",
       "icon": "icon.icns",
       "background": "build/background.png",
       "contents": [
@@ -139,7 +145,7 @@
       "icon": "assets/icon.png",
       "category": "Utility",
       "desktop": {
-        "Name": "CECP 投影",
+        "Name": "CECP 圣经投影",
         "Comment": "圣经投影软件",
         "Keywords": "bible;projection;presentation;"
       }
@@ -154,14 +160,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@todesktop/robotjs-prebuild": "^0.6.27",
-    "key-state": "^1.0.1",
-    "keyboard-state": "^0.1.0",
-    "sqlite3": "^5.1.7"
+    "better-sqlite3": "^12.2.0",
+    "chalk": "^4.1.2"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.2",
-    "electron": "28.0.0",
+    "electron": "^37.3.1",
     "electron-builder": "24.13.3"
   }
 }

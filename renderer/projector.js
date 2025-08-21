@@ -195,22 +195,10 @@ document.addEventListener('keydown', (e) => {
       
     case 'Escape':
       e.preventDefault()
-      // ESC：取消高亮或关闭投影窗口
-      if (highlightedVerse >= 0) {
-        animateHighlight(highlightedVerse, -1) // 取消高亮
-      } else {
-        console.log('ESC pressed, closing projector')
-        window.close() // 关闭投影窗口
-      }
+      // ESC：强制关闭投影窗口（简化逻辑）
+      console.log('ESC pressed, closing projector')
+      window.close()
       break
-  }
-})
-
-// ESC键退出投影（保留原有功能作为备用）
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    console.log('ESC pressed, closing projector')
-    window.close()
   }
 })
 
