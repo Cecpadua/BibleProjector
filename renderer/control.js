@@ -40,12 +40,22 @@ const settingSelectVerse = document.getElementById('settingSelectVerse')
 const settingProject = document.getElementById('settingProject')
 const settingShowControl = document.getElementById('settingShowControl')
 
+// 右键菜单相关
+const contextMenu = document.getElementById('contextMenu')
+const copyText = document.getElementById('copyText')
+const copyReference = document.getElementById('copyReference')
+const copyAll = document.getElementById('copyAll')
+
 // 按键记录器实例
 let keyRecorder = null
 let isKeyRecording = false
 
 // 历史搜索相关
 let searchHistory = []
+
+// 右键菜单状态
+let contextMenuVisible = false
+let rightClickedVerse = -1 // 右键点击的经文索引
 
 
 let projectorRunning = false
@@ -269,8 +279,87 @@ function renderVerses(payload) {
   window.api.sendContent(payload)
 }
 
+// 验证输入是否超出范围
+async function validateInput(text) {
+  if (!text.trim()) return { valid: true }
+  
+  try {
+    const parts = text.trim().split(/\s+/)
+    
+    if (parts.length >= 2) {
+      const bookPy = parts[0]
+      const chapter = parseInt(parts[1])
+      
+      // 检查书卷是否存在
+      const bookSuggestions = await window.api.getSuggestions(bookPy)
+      if (bookSuggestions.length === 0) {
+        return { valid: false, message: '未找到该书卷' }
+      }
+      
+      const book = bookSuggestions[0]
+      
+      // 检查章节是否超出范围
+      if (isNaN(chapter) || chapter < 1 || chapter > book.chapters) {
+        return { valid: false, message: `章节超出范围 (1-${book.chapters})` }
+      }
+      
+      // 如果有节数，检查节数范围
+      if (parts.length >= 3) {
+        const startVerse = parseInt(parts[2])
+        
+        if (!isNaN(startVerse)) {
+          try {
+            const verseRange = await window.api.getVerseRange(bookPy, chapter)
+            if (verseRange.maxVerse > 0) {
+              if (startVerse < 1 || startVerse > verseRange.maxVerse) {
+                return { valid: false, message: `起始节数超出范围 (1-${verseRange.maxVerse})` }
+              }
+              
+              // 如果有结束节数，检查结束节数范围
+              if (parts.length >= 4) {
+                const endVerse = parseInt(parts[3])
+                if (!isNaN(endVerse)) {
+                  if (endVerse < startVerse || endVerse > verseRange.maxVerse) {
+                    return { valid: false, message: `结束节数超出范围 (${startVerse}-${verseRange.maxVerse})` }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            return { valid: false, message: '无法获取节数范围' }
+          }
+        }
+      }
+    }
+    
+    return { valid: true }
+  } catch (e) {
+    return { valid: false, message: '输入格式错误' }
+  }
+}
+
 async function doSearch(text) {
   if (!text.trim()) return
+  
+  // 先验证输入
+  const validation = await validateInput(text)
+  if (!validation.valid) {
+    // 显示错误状态
+    quick.classList.add('error')
+    meta.textContent = `输入错误：${validation.message}`
+    ctx.clearRect(0, 0, preview.width, preview.height)
+    
+    // 3秒后自动清除错误状态
+    setTimeout(() => {
+      quick.classList.remove('error')
+      meta.textContent = ''
+    }, 3000)
+    return
+  }
+  
+  // 清除可能的错误状态
+  quick.classList.remove('error')
+  
   try {
     const res = await window.api.search(text)
     renderVerses(res)
@@ -284,6 +373,23 @@ async function doSearch(text) {
   }
 }
 
+// 显示错误建议
+function showErrorSuggestion(errorMessage, errorType = 'error') {
+  const iconMap = {
+    'error': '❌',
+    'warning': '⚠️',
+    'info': 'ℹ️'
+  }
+  
+  suggestions.innerHTML = `
+    <div class="suggestion-item error-suggestion">
+      <span class="suggestion-py">${iconMap[errorType]}</span>
+      <span class="suggestion-name" style="color: #dc3545;">${errorMessage}</span>
+      <span class="suggestion-range"></span>
+    </div>`
+  suggestions.style.display = 'block'
+}
+
 // 显示建议
 async function showSuggestions(input) {
   try {
@@ -295,7 +401,8 @@ async function showSuggestions(input) {
       currentSuggestions = sug
       
       if (sug.length === 0) {
-        hideSuggestions()
+        // 显示"未找到书卷"错误
+        showErrorSuggestion(`未找到书卷 "${input}"`)
         return
       }
       
@@ -316,36 +423,45 @@ async function showSuggestions(input) {
           <div class="suggestion-item info-only">
             <span class="suggestion-py">${book.py}</span>
             <span class="suggestion-name">${book.name}</span>
-            <span class="suggestion-range">章节范围: ${book.chapters}</span>
+            <span class="suggestion-range">章节范围: 1-${book.chapters}</span>
           </div>`
       } else {
-        hideSuggestions()
+        showErrorSuggestion(`未找到书卷 "${parts[0]}"`)
         return
       }
       
     } else if (parts.length === 2 && parts[1] !== '') {
-      // 正在输入章节号，显示章节范围提示
+      // 正在输入章节号，显示章节范围提示或错误
       const bookSuggestions = await window.api.getSuggestions(parts[0])
       if (bookSuggestions.length > 0) {
         const book = bookSuggestions[0]
         const chapter = parseInt(parts[1])
         if (!isNaN(chapter)) {
+          // 检查章节范围
+          if (chapter > book.chapters) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+            return
+          } else if (chapter < 1) {
+            showErrorSuggestion(`章节号不能小于1`)
+            return
+          }
+          
           suggestions.innerHTML = `
             <div class="suggestion-item info-only">
               <span class="suggestion-py">${book.py} ${chapter}</span>
               <span class="suggestion-name">${book.name}</span>
-              <span class="suggestion-range">章节范围: ${book.chapters}</span>
+              <span class="suggestion-range">章节范围: 1-${book.chapters}</span>
             </div>`
         } else {
           suggestions.innerHTML = `
             <div class="suggestion-item info-only">
               <span class="suggestion-py">${book.py}</span>
               <span class="suggestion-name">${book.name}</span>
-              <span class="suggestion-range">章节范围: ${book.chapters}</span>
+              <span class="suggestion-range">章节范围: 1-${book.chapters}</span>
             </div>`
         }
       } else {
-        hideSuggestions()
+        showErrorSuggestion(`未找到书卷 "${parts[0]}"`)
         return
       }
       
@@ -357,9 +473,22 @@ async function showSuggestions(input) {
       if (!isNaN(chapter)) {
         try {
           const bookSuggestions = await window.api.getSuggestions(py)
+          if (bookSuggestions.length === 0) {
+            showErrorSuggestion(`未找到书卷 "${py}"`)
+            return
+          }
+          
+          const book = bookSuggestions[0]
+          if (chapter > book.chapters) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+            return
+          } else if (chapter < 1) {
+            showErrorSuggestion(`章节号不能小于1`)
+            return
+          }
+          
           const verseRange = await window.api.getVerseRange(py, chapter)
-          if (verseRange.maxVerse > 0 && bookSuggestions.length > 0) {
-            const book = bookSuggestions[0]
+          if (verseRange.maxVerse > 0) {
             suggestions.innerHTML = `
               <div class="suggestion-item info-only">
                 <span class="suggestion-py">${py} ${chapter}</span>
@@ -367,11 +496,11 @@ async function showSuggestions(input) {
                 <span class="suggestion-range">节数范围: 1-${verseRange.maxVerse}</span>
               </div>`
           } else {
-            hideSuggestions()
+            showErrorSuggestion(`无法获取${book.name}第${chapter}章的节数信息`)
             return
           }
         } catch (e) {
-          hideSuggestions()
+          showErrorSuggestion(`获取章节信息失败`)
           return
         }
       } else {
@@ -380,7 +509,7 @@ async function showSuggestions(input) {
       }
       
     } else if (parts.length === 3 && parts[2] !== '') {
-      // 正在输入节数，显示节数范围
+      // 正在输入节数，显示节数范围或错误
       const py = parts[0]
       const chapter = parseInt(parts[1])
       const verse = parseInt(parts[2])
@@ -388,25 +517,53 @@ async function showSuggestions(input) {
       if (!isNaN(chapter)) {
         try {
           const bookSuggestions = await window.api.getSuggestions(py)
+          if (bookSuggestions.length === 0) {
+            showErrorSuggestion(`未找到书卷 "${py}"`)
+            return
+          }
+          
+          const book = bookSuggestions[0]
+          if (chapter > book.chapters) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+            return
+          } else if (chapter < 1) {
+            showErrorSuggestion(`章节号不能小于1`)
+            return
+          }
+          
           const verseRange = await window.api.getVerseRange(py, chapter)
-          if (verseRange.maxVerse > 0 && bookSuggestions.length > 0) {
-            const book = bookSuggestions[0]
-            let displayText = `${py} ${chapter}`
+          if (verseRange.maxVerse > 0) {
+            // 检查节数范围
             if (!isNaN(verse)) {
-              displayText += ` ${verse}`
+              if (verse > verseRange.maxVerse) {
+                showErrorSuggestion(`${book.name}第${chapter}章没有第${verse}节 (最多${verseRange.maxVerse}节)`)
+                return
+              } else if (verse < 1) {
+                showErrorSuggestion(`节数不能小于1`)
+                return
+              }
+              
+              let displayText = `${py} ${chapter} ${verse}`
+              suggestions.innerHTML = `
+                <div class="suggestion-item info-only">
+                  <span class="suggestion-py">${displayText}</span>
+                  <span class="suggestion-name">${book.name}</span>
+                  <span class="suggestion-range">节数范围: 1-${verseRange.maxVerse}</span>
+                </div>`
+            } else {
+              suggestions.innerHTML = `
+                <div class="suggestion-item info-only">
+                  <span class="suggestion-py">${py} ${chapter}</span>
+                  <span class="suggestion-name">${book.name}</span>
+                  <span class="suggestion-range">节数范围: 1-${verseRange.maxVerse}</span>
+                </div>`
             }
-            suggestions.innerHTML = `
-              <div class="suggestion-item info-only">
-                <span class="suggestion-py">${displayText}</span>
-                <span class="suggestion-name">${book.name}</span>
-                <span class="suggestion-range">节数范围: 1-${verseRange.maxVerse}</span>
-              </div>`
           } else {
-            hideSuggestions()
+            showErrorSuggestion(`无法获取${book.name}第${chapter}章的节数信息`)
             return
           }
         } catch (e) {
-          hideSuggestions()
+          showErrorSuggestion(`获取节数信息失败`)
           return
         }
       } else {
@@ -424,9 +581,42 @@ async function showSuggestions(input) {
       if (!isNaN(chapter) && !isNaN(startVerse)) {
         try {
           const bookSuggestions = await window.api.getSuggestions(py)
+          if (bookSuggestions.length === 0) {
+            showErrorSuggestion(`未找到书卷 "${py}"`)
+            return
+          }
+          
+          const book = bookSuggestions[0]
+          if (chapter > book.chapters) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+            return
+          } else if (chapter < 1) {
+            showErrorSuggestion(`章节号不能小于1`)
+            return
+          }
+          
           const verseRange = await window.api.getVerseRange(py, chapter)
-          if (verseRange.maxVerse > 0 && bookSuggestions.length > 0) {
-            const book = bookSuggestions[0]
+          if (verseRange.maxVerse > 0) {
+            // 检查起始节数
+            if (startVerse > verseRange.maxVerse) {
+              showErrorSuggestion(`${book.name}第${chapter}章没有第${startVerse}节 (最多${verseRange.maxVerse}节)`)
+              return
+            } else if (startVerse < 1) {
+              showErrorSuggestion(`起始节数不能小于1`)
+              return
+            }
+            
+            // 检查结束节数（如果有）
+            if (endVerse !== null && !isNaN(endVerse)) {
+              if (endVerse > verseRange.maxVerse) {
+                showErrorSuggestion(`${book.name}第${chapter}章没有第${endVerse}节 (最多${verseRange.maxVerse}节)`)
+                return
+              } else if (endVerse < startVerse) {
+                showErrorSuggestion(`结束节数不能小于起始节数`)
+                return
+              }
+            }
+            
             let displayText = `${py} ${chapter} ${startVerse}`
             if (endVerse !== null && !isNaN(endVerse)) {
               displayText += ` ${endVerse}`
@@ -438,11 +628,11 @@ async function showSuggestions(input) {
                 <span class="suggestion-range">节数范围: 1-${verseRange.maxVerse} (${startVerse}${endVerse ? `-${endVerse}` : ''})</span>
               </div>`
           } else {
-            hideSuggestions()
+            showErrorSuggestion(`无法获取${book.name}第${chapter}章的节数信息`)
             return
           }
         } catch (e) {
-          hideSuggestions()
+          showErrorSuggestion(`获取节数信息失败`)
           return
         }
       } else {
@@ -479,7 +669,7 @@ function selectSuggestion(index) {
 }
 
 
-quick.addEventListener('input', (e) => {
+quick.addEventListener('input', async (e) => {
   // 检查是否正在录制按键
   if (isKeyRecording) {
     e.stopPropagation()
@@ -488,8 +678,25 @@ quick.addEventListener('input', (e) => {
   }
   
   const input = e.target.value
+  
+  // 清除之前的错误状态
+  quick.classList.remove('error')
+  
   if (input.length > 0) {
     const parts = input.split(/\s+/)
+    
+    // 实时验证输入（只在输入相对完整时验证）
+    if (parts.length >= 2 && parts[1] !== '') {
+      const validation = await validateInput(input)
+      if (!validation.valid) {
+        quick.classList.add('error')
+        meta.textContent = `输入错误：${validation.message}`
+      } else {
+        meta.textContent = ''
+      }
+    } else {
+      meta.textContent = ''
+    }
     
     // 检查输入的不同阶段
     if (parts.length === 1 && !input.endsWith(' ')) {
@@ -519,6 +726,7 @@ quick.addEventListener('input', (e) => {
     }
   } else {
     hideSuggestions()
+    meta.textContent = ''
   }
 })
 
@@ -834,6 +1042,37 @@ preview.addEventListener('click', (e) => {
   
   // 如果点击的不是任何经文，取消高亮
  // highlightVerse(-1)
+})
+
+// Canvas右键菜单事件
+preview.addEventListener('contextmenu', (e) => {
+  e.preventDefault()
+  
+  if (!currentData) return
+  
+  const rect = preview.getBoundingClientRect()
+  const clickY = e.clientY - rect.top + previewScrollOffset
+  const fontSizePx = (userSettings.fontSize / 100) * rect.height
+  const lineHeight = fontSizePx * 1.6
+  const paddingTop = rect.height * 0.04
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
+  
+  // 计算内容开始位置
+  let currentY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
+  if (!userSettings.fixedTitle) {
+    currentY += titleHeight
+  }
+  
+  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
+  const tempCanvas = document.createElement('canvas')
+  const tempCtx = tempCanvas.getContext('2d')
+  tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
+  
+  // 检查右键点击位置对应的经文
+  rightClickedVerse = highlightedVerse
+
+  // 显示右键菜单
+  showContextMenu(e.clientX, e.clientY)
 })
 
 // 键盘导航（支持双击检测和下一段跳转）
@@ -1290,8 +1529,154 @@ btnSettings.addEventListener('click', toggleSettingsPanel)
 btnCloseSettings.addEventListener('click', closeSettingsPanel)
 btnResetSettings.addEventListener('click', resetSettings)
 
+// 右键菜单事件监听
+copyText.addEventListener('click', () => {
+  if (highlightedVerse >= 0 && !copyText.classList.contains('disabled')) {
+    const text = getVerseText(highlightedVerse)
+    copyToClipboard(text)
+  }
+  hideContextMenu()
+})
+
+copyReference.addEventListener('click', () => {
+  if (rightClickedVerse >= 0 && !copyReference.classList.contains('disabled')) {
+    const reference = getVerseReference(rightClickedVerse)
+    copyToClipboard(reference)
+  }
+  hideContextMenu()
+})
+
+copyAll.addEventListener('click', () => {
+  if (!copyAll.classList.contains('disabled')) {
+    const allText = getAllText()
+    copyToClipboard(allText)
+  }
+  hideContextMenu()
+})
+
+// 点击其他地方隐藏右键菜单
+document.addEventListener('click', (e) => {
+  if (contextMenuVisible && !contextMenu.contains(e.target)) {
+    hideContextMenu()
+  }
+})
+
 // 初始化设置
 initializeSettings()
+// 右键菜单相关函数
+function showContextMenu(x, y) {
+  // 隐藏任何现有的菜单
+  hideContextMenu()
+  
+  // 设置菜单位置
+  contextMenu.style.left = x + 'px'
+  contextMenu.style.top = y + 'px'
+  
+  // 检查菜单是否会超出屏幕边界
+  const menuRect = contextMenu.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  
+  if (x + menuRect.width > viewportWidth) {
+    contextMenu.style.left = (x - menuRect.width) + 'px'
+  }
+  
+  if (y + menuRect.height > viewportHeight) {
+    contextMenu.style.top = (y - menuRect.height) + 'px'
+  }
+  
+  // 显示菜单
+  contextMenu.style.display = 'block'
+  contextMenuVisible = true
+  
+  // 根据选中的经文更新菜单项状态
+  updateContextMenuItems()
+}
+
+function hideContextMenu() {
+  contextMenu.style.display = 'none'
+  contextMenuVisible = false
+  rightClickedVerse = -1
+}
+
+function updateContextMenuItems() {
+  if (!currentData) {
+    copyText.classList.add('disabled')
+    copyReference.classList.add('disabled')
+    copyAll.classList.add('disabled')
+    return
+  }
+  
+  // 如果点击了具体经文
+  if (highlightedVerse >= 0) {
+    copyText.classList.remove('disabled')
+    copyReference.classList.remove('disabled')
+  } else {
+    copyText.classList.add('disabled')
+    copyReference.classList.add('disabled')
+  }
+  
+  // 复制全部总是可用（如果有数据）
+  copyAll.classList.remove('disabled')
+}
+
+// 复制到剪贴板功能
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    // 简单的成功提示
+    meta.textContent = '已复制到剪贴板'
+    setTimeout(() => {
+      if (currentData) {
+        const { meta: m } = currentData
+        meta.textContent = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}`
+      } else {
+        meta.textContent = ''
+      }
+    }, 1500)
+  } catch (err) {
+    console.error('复制失败:', err)
+    meta.textContent = '复制失败'
+    setTimeout(() => {
+      if (currentData) {
+        const { meta: m } = currentData
+        meta.textContent = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}`
+      } else {
+        meta.textContent = ''
+      }
+    }, 1500)
+  }
+}
+
+function getVerseText(verseIndex) {
+  if (!currentData || verseIndex < 0 || verseIndex >= currentData.verses.length) {
+    return ''
+  }
+  
+  const verse = currentData.verses[verseIndex]
+  return `${verse.VerseSN}. ${verse.strjw}`
+}
+
+function getVerseReference(verseIndex) {
+  if (!currentData || verseIndex < 0 || verseIndex >= currentData.verses.length) {
+    return ''
+  }
+  
+  const verse = currentData.verses[verseIndex]
+  const { meta: m } = currentData
+  return `${m.book} ${m.chapter}:${verse.VerseSN}`
+}
+
+function getAllText() {
+  if (!currentData) return ''
+  
+  const { meta: m, verses } = currentData
+  const title = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}\n\n`
+  const content = verses.map(verse => `${verse.VerseSN}. ${verse.strjw}`).join('\n')
+  
+  return title + content
+}
+
 // 全局键盘事件监听
 document.addEventListener('keydown', (e) => {
 
@@ -1342,6 +1727,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault()
     if (quick.value.trim()) {
+      // 检查输入框是否有错误状态
+      if (quick.classList.contains('error')) {
+        // 如果有错误状态，不执行搜索，只显示提示
+        meta.textContent = '请修正输入错误后再搜索'
+        return
+      }
       doSearch(quick.value)
       quick.value = '' // 清空输入框
     }
@@ -1351,6 +1742,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault()
     quick.value = '' // 清空输入框
+    quick.classList.remove('error') // 清除错误状态
+    meta.textContent = '' // 清除错误信息
     return
   }
   

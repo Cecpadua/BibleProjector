@@ -112,6 +112,7 @@
     header strong { -webkit-app-region: no-drag; }
     .row { padding: 8px 12px; }
     .input { width: 100%; padding: 8px 0px; border: 1px solid #ccc; border-radius:6px; font-size: 14px; }
+    .input.error { border-color: #dc3545; background-color: #ffebee; }
     .buttons { display:flex; gap:8px; -webkit-app-region: no-drag; }
     .btn-primary { background:#1e90ff; color:#fff; }
     .btn-settings { background:#6c757d; color:#fff; }
@@ -125,6 +126,8 @@
     .suggestion-item:last-child { border-bottom: none; }
     .suggestion-item.info-only { cursor: default; background: #f8f9fa; }
     .suggestion-item.info-only:hover { background: #f8f9fa; }
+    .suggestion-item.error-suggestion { cursor: default; background: #fff5f5; border-left: 3px solid #dc3545; }
+    .suggestion-item.error-suggestion:hover { background: #fff5f5; }
     .suggestion-py { font-weight: bold; color: #1e90ff; }
     .suggestion-name { margin-left: 8px; }
     .suggestion-range { color: #666; margin-left: 4px; }
@@ -202,6 +205,52 @@
       cursor: not-allowed;
       opacity: 0.6;
     }
+    
+    /* 右键菜单样式 */
+    .context-menu {
+      position: fixed;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      padding: 4px 0;
+      z-index: 1000;
+      display: none;
+      min-width: 120px;
+    }
+    
+    .context-menu-item {
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .context-menu-item:hover {
+      background: #f0f0f0;
+    }
+    
+    .context-menu-item:active {
+      background: #e0e0e0;
+    }
+    
+    .context-menu-item.disabled {
+      color: #999;
+      cursor: not-allowed;
+    }
+    
+    .context-menu-item.disabled:hover {
+      background: transparent;
+    }
+    
+    .context-menu-icon {
+      width: 12px;
+      height: 12px;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -217,7 +266,7 @@
 
     <div class="row">
       <label>快捷输入（如：CSJ 1 12 16）</label>
-      <input id="quick" class="input" placeholder="输入并回车..." disabled inputmode="latin" pattern="[A-Za-z0-9]*" />
+      <input id="quick" class="input" placeholder="输入并回车..."  inputmode="latin" pattern="[A-Za-z0-9]*" />
       <div id="suggestions" class="suggestions"></div>
     </div>
 
@@ -352,6 +401,23 @@
       </div>
     </div>
   </div>
+
+  <!-- 右键菜单 -->
+  <div id="contextMenu" class="context-menu">
+    <div class="context-menu-item" id="copyText">
+      <span class="context-menu-icon">📋</span>
+      复制高亮经文
+    </div>
+    <div class="context-menu-item" id="copyReference" style="display: none;">
+      <span class="context-menu-icon">📖</span>
+      复制引用
+    </div>
+    <div class="context-menu-item" id="copyAll">
+      <span class="context-menu-icon">📄</span>
+      复制全部
+    </div>
+  </div>
+
   <script type="module" src="./control.js"></script>
 </body>
 </html>
