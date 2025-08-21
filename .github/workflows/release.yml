@@ -37,9 +37,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.version.outputs.VERSION }}
-        release_name: CECP 投影系统 ${{ steps.version.outputs.VERSION }}
+        release_name: CECP圣经投影 ${{ steps.version.outputs.VERSION }}
         body: |
-          # CECP 投影系统 ${{ steps.version.outputs.VERSION }}
+          # CECP圣经投影 ${{ steps.version.outputs.VERSION }}
           
           ## 📋 功能特性
           
@@ -55,18 +55,18 @@ jobs:
           请根据您的操作系统选择对应的安装包：
           
           ### Windows 用户
-          - **推荐**: `CECP-投影-Setup-${{ steps.version.outputs.VERSION }}.exe` (安装版)
-          - **便携版**: `CECP-投影-${{ steps.version.outputs.VERSION }}-win.zip` (免安装)
+          - **推荐**: `CECP圣经投影-Setup-${{ steps.version.outputs.VERSION }}.exe` (安装版)
+          - **便携版**: `CECP圣经投影-${{ steps.version.outputs.VERSION }}-win.zip` (免安装)
           
           ### macOS 用户
-          - **Intel 芯片**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-x64.dmg`
-          - **Apple Silicon (M1/M2)**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-arm64.dmg`
-          - **通用版**: `CECP-投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg`
+          - **Intel 芯片**: `CECP圣经投影-${{ steps.version.outputs.VERSION }}-mac-x64.dmg`
+          - **Apple Silicon (M1/M2)**: `CECP圣经投影-${{ steps.version.outputs.VERSION }}-mac-arm64.dmg`
+          - **通用版**: `CECP圣经投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg`
           
           ### Linux 用户
-          - **AppImage** (推荐): `CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage`
-          - **Debian/Ubuntu**: `cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb`
-          - **RedHat/CentOS**: `cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm`
+          - **AppImage** (推荐): `CECP圣经投影-${{ steps.version.outputs.VERSION }}.AppImage`
+          - **Debian/Ubuntu**: `cecp圣经投影_${{ steps.version.outputs.VERSION }}_amd64.deb`
+          - **RedHat/CentOS**: `cecp圣经投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm`
           
           ## 🚀 安装指南
           
@@ -83,19 +83,19 @@ jobs:
           ### Linux
           #### AppImage 方式
           ```bash
-          chmod +x CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
-          ./CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
+          chmod +x CECP圣经投影-${{ steps.version.outputs.VERSION }}.AppImage
+          ./CECP圣经投影-${{ steps.version.outputs.VERSION }}.AppImage
           ```
           
           #### Debian/Ubuntu
           ```bash
-          sudo dpkg -i cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
+          sudo dpkg -i cecp圣经投影_${{ steps.version.outputs.VERSION }}_amd64.deb
           sudo apt-get install -f  # 如果有依赖问题
           ```
           
           #### RedHat/CentOS/Fedora
           ```bash
-          sudo rpm -i cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
+          sudo rpm -i cecp圣经投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
           ```
           
           ## 🔧 系统要求
@@ -205,6 +205,8 @@ jobs:
         find dist/ -name "*.dmg" 2>/dev/null || echo "No .dmg files found"
         echo "Looking for Linux AppImage:"
         find dist/ -name "*.AppImage" 2>/dev/null || echo "No .AppImage files found"
+        echo "=== Debug: All file names in dist ==="
+        find dist/ -type f -exec basename {} \; 2>/dev/null | sort || echo "No files found"
     
     # 上传 Windows 构建产物
     - name: Upload Windows installer
@@ -213,15 +215,23 @@ jobs:
       run: |
         EXE_FILE=$(find dist/ -name "*.exe" | head -n 1)
         if [ -n "$EXE_FILE" ]; then
-          echo "Found installer: $EXE_FILE"
-          curl -L \
+          FILENAME=$(basename "$EXE_FILE")
+          echo "Found installer: $EXE_FILE (filename: $FILENAME)"
+          echo "Will upload as: CECP圣经投影-Setup-${{ steps.version.outputs.VERSION }}.exe"
+          
+          # Upload with unified naming
+          if curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/octet-stream" \
             --data-binary @"$EXE_FILE" \
-            "${{ needs.create-release.outputs.upload_url }}?name=CECP-投影-Setup-${{ steps.version.outputs.VERSION }}.exe"
+            "${{ needs.create-release.outputs.upload_url }}?name=CECP圣经投影-Setup-${{ steps.version.outputs.VERSION }}.exe"; then
+            echo "Successfully uploaded Windows installer"
+          else
+            echo "Failed to upload Windows installer"
+          fi
         else
           echo "No .exe installer found"
         fi
@@ -241,7 +251,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/zip" \
             --data-binary @"$ZIP_FILE" \
-            "${{ needs.create-release.outputs.upload_url }}?name=CECP-投影-${{ steps.version.outputs.VERSION }}-win.zip"
+            "${{ needs.create-release.outputs.upload_url }}?name=CECP圣经投影-${{ steps.version.outputs.VERSION }}-win.zip"
         else
           echo "No .zip file found"
         fi
@@ -250,51 +260,83 @@ jobs:
     # 上传 macOS 构建产物
     - name: Upload macOS DMG
       if: matrix.platform == 'mac'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/CECP-投影-${{ steps.version.outputs.VERSION }}-universal.dmg
-        asset_name: CECP-投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg
-        asset_content_type: application/octet-stream
+      shell: bash
+      run: |
+        DMG_FILE=$(find dist/ -name "*.dmg" | head -n 1)
+        if [ -n "$DMG_FILE" ]; then
+          echo "Found DMG: $DMG_FILE"
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$DMG_FILE" \
+            "${{ needs.create-release.outputs.upload_url }}?name=CECP圣经投影-${{ steps.version.outputs.VERSION }}-mac-universal.dmg"
+        else
+          echo "No .dmg file found"
+        fi
       continue-on-error: true
     
     # 上传 Linux 构建产物
     - name: Upload Linux AppImage
       if: matrix.platform == 'linux'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
-        asset_name: CECP-投影-${{ steps.version.outputs.VERSION }}.AppImage
-        asset_content_type: application/octet-stream
+      shell: bash
+      run: |
+        APPIMAGE_FILE=$(find dist/ -name "*.AppImage" | head -n 1)
+        if [ -n "$APPIMAGE_FILE" ]; then
+          echo "Found AppImage: $APPIMAGE_FILE"
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$APPIMAGE_FILE" \
+            "${{ needs.create-release.outputs.upload_url }}?name=CECP圣经投影-${{ steps.version.outputs.VERSION }}.AppImage"
+        else
+          echo "No .AppImage file found"
+        fi
       continue-on-error: true
     
     - name: Upload Linux DEB
       if: matrix.platform == 'linux'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
-        asset_name: cecp-投影_${{ steps.version.outputs.VERSION }}_amd64.deb
-        asset_content_type: application/vnd.debian.binary-package
+      shell: bash
+      run: |
+        DEB_FILE=$(find dist/ -name "*.deb" | head -n 1)
+        if [ -n "$DEB_FILE" ]; then
+          echo "Found DEB: $DEB_FILE"
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/vnd.debian.binary-package" \
+            --data-binary @"$DEB_FILE" \
+            "${{ needs.create-release.outputs.upload_url }}?name=cecp圣经投影_${{ steps.version.outputs.VERSION }}_amd64.deb"
+        else
+          echo "No .deb file found"
+        fi
       continue-on-error: true
     
     - name: Upload Linux RPM
       if: matrix.platform == 'linux'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
-        asset_name: cecp-投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm
-        asset_content_type: application/x-rpm
+      shell: bash
+      run: |
+        RPM_FILE=$(find dist/ -name "*.rpm" | head -n 1)
+        if [ -n "$RPM_FILE" ]; then
+          echo "Found RPM: $RPM_FILE"
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/x-rpm" \
+            --data-binary @"$RPM_FILE" \
+            "${{ needs.create-release.outputs.upload_url }}?name=cecp圣经投影-${{ steps.version.outputs.VERSION }}.x86_64.rpm"
+        else
+          echo "No .rpm file found"
+        fi
       continue-on-error: true
     
     # 上传所有构建产物作为备份

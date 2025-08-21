@@ -1,7 +1,7 @@
 {
   "name": "cecp-projection",
   "version": "1.0.0",
-  "description": "CECP 圣经投影软件",
+  "description": "CECP圣经投影软件",
   "main": "./src/main.js",
   "type": "module",
   "homepage": "https://github.com/cecpadua/cecp-projection",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "it.cecp.bible.projection",
-    "productName": "CECP 圣经投影",
+    "productName": "CECP圣经投影",
     "directories": {
       "output": "dist"
     },
@@ -52,7 +52,7 @@
           ]
         },
         {
-          "target": "portable",
+          "target": "zip",
           "arch": [
             "x64",
             "ia32"
@@ -60,7 +60,8 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -68,11 +69,12 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "uninstallDisplayName": "CECP 圣经投影",
+      "uninstallDisplayName": "CECP圣经投影",
       "license": "LICENSE.txt",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CECP 圣经投影"
+      "shortcutName": "CECP圣经投影",
+      "artifactName": "${productName} Setup ${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -92,16 +94,11 @@
         }
       ],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.utilities",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "category": "public.app-category.utilities"
     },
     "dmg": {
-      "title": "CECP 圣经投影",
-      "icon": "icon.icns",
-      "background": "build/background.png",
+      "title": "CECP圣经投影",
+      "icon": "assets/icon.icns",
       "contents": [
         {
           "x": 130,
@@ -113,7 +110,8 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "internetEnabled": false
     },
     "linux": {
       "target": [
@@ -145,7 +143,7 @@
       "icon": "assets/icon.png",
       "category": "Utility",
       "desktop": {
-        "Name": "CECP 圣经投影",
+        "Name": "CECP圣经投影",
         "Comment": "圣经投影软件",
         "Keywords": "bible;projection;presentation;"
       }
@@ -165,6 +163,7 @@
   },
   "devDependencies": {
     "electron": "^37.3.1",
-    "electron-builder": "24.13.3"
+    "electron-builder": "24.13.3",
+    "png2icons": "^2.0.1"
   }
 }
