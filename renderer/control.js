@@ -10,6 +10,10 @@ const btnSettings = document.getElementById('btnSettings')
 const btnCloseSettings = document.getElementById('btnCloseSettings')
 const btnResetSettings = document.getElementById('btnResetSettings')
 const settingsPanel = document.getElementById('settingsPanel')
+const btnAbout = document.getElementById('btnAbout')
+const btnCloseAbout = document.getElementById('btnCloseAbout')
+const aboutPanel = document.getElementById('aboutPanel')
+const aboutGithub = document.getElementById('aboutGithub')
 const selDisplay = document.getElementById('display')
 const suggestions = document.getElementById('suggestions')
 const fontSize = document.getElementById('fontSize')
@@ -1208,6 +1212,9 @@ function toggleSettingsPanel() {
     // 恢复原始窗口宽度
     window.api.resizeWindow(400, -1)
   } else {
+    // 先关闭关于面板（如果打开）
+    closeAboutPanel()
+    
     // 显示设置面板
     settingsPanel.style.display = 'block'
     btnSettings.textContent = '隐藏'
@@ -1219,6 +1226,35 @@ function toggleSettingsPanel() {
 function closeSettingsPanel() {
   settingsPanel.style.display = 'none'
   btnSettings.textContent = '设置'
+  // 恢复原始窗口宽度
+  window.api.resizeWindow(400, -1)
+}
+
+// 关于面板功能
+function toggleAboutPanel() {
+  const isVisible = aboutPanel.style.display === 'block'
+  
+  if (isVisible) {
+    // 隐藏关于面板
+    aboutPanel.style.display = 'none'
+    btnAbout.textContent = '关于'
+    // 恢复原始窗口宽度
+    window.api.resizeWindow(400, -1)
+  } else {
+    // 先关闭设置面板（如果打开）
+    closeSettingsPanel()
+    
+    // 显示关于面板
+    aboutPanel.style.display = 'block'
+    btnAbout.textContent = '隐藏'
+    // 扩展窗口宽度以容纳关于面板
+    window.api.resizeWindow(750, -1)
+  }
+}
+
+function closeAboutPanel() {
+  aboutPanel.style.display = 'none'
+  btnAbout.textContent = '关于'
   // 恢复原始窗口宽度
   window.api.resizeWindow(400, -1)
 }
@@ -1528,6 +1564,14 @@ function updateSettingsUI() {
 btnSettings.addEventListener('click', toggleSettingsPanel)
 btnCloseSettings.addEventListener('click', closeSettingsPanel)
 btnResetSettings.addEventListener('click', resetSettings)
+
+// 关于按钮事件监听
+btnAbout.addEventListener('click', toggleAboutPanel)
+btnCloseAbout.addEventListener('click', closeAboutPanel)
+aboutGithub.addEventListener('click', (e) => {
+  e.preventDefault()
+  window.api.openExternal('https://github.com/cecpadua/BibleProjector')
+})
 
 // 右键菜单事件监听
 copyText.addEventListener('click', () => {

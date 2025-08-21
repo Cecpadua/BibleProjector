@@ -31,5 +31,6 @@ contextBridge.exposeInMainWorld('api', {
   batchUpdateSettings: (allSettings) => ipcRenderer.send('settings:batch-update', allSettings),
   clearAllSettings: () => ipcRenderer.invoke('settings:clear-all'),
   getDefaultSettings: () => ipcRenderer.invoke('settings:get-default'),
-  hide: () => ipcRenderer.invoke('window:hide')
+  hide: () => ipcRenderer.invoke('window:hide'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url)
 })

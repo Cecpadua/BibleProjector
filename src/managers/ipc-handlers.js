@@ -1,5 +1,5 @@
 // ipc-handlers.js - IPC通信处理模块
-import { ipcMain, screen } from 'electron'
+import { ipcMain, screen, shell } from 'electron'
 import { getVersesByRef, getBookSuggestions, getVerseRange } from '../db.js'
 import Logger from '../utils/logger.js'
 
@@ -112,6 +112,18 @@ class IPCHandlers {
     ipcMain.handle('settings:get-default', async (e) => {
       Logger.log("get default settings", await this.settingsManager.getDefaultSettings())
       return this.settingsManager.getDefaultSettings()
+    })
+
+    // 系统功能
+    ipcMain.handle('app:open-external', async (e, url) => {
+      try {
+        await shell.openExternal(url)
+        Logger.log('External URL opened:', url)
+        return { success: true }
+      } catch (err) {
+        Logger.error('Failed to open external URL:', err.message)
+        return { success: false, error: err.message }
+      }
     })
 
     // 单向通信处理
