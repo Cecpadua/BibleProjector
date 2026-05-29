@@ -1,12 +1,13 @@
-import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, measureContentHeight, measureVerseHeight } from "./common.js"
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, measureContentHeight, measureVerseHeight, getDualLayoutMetrics, getRenderFontSize, getRenderLineHeight, getVerseSpacing } from "./common.js"
 
 const canvas = document.getElementById('projectorCanvas')
 let ctx = canvas.getContext('2d') // 使用let而不是const
 
 let currentData = null
-let fontSize = 8 // 与control.js默认值保持一致
+let fontSize = 7 // 与control.js默认值保持一致
 let scrollOffset = 0
 let highlightedVerse = -1 // 当前高亮的经文索引
+const PROJECTOR_WHEEL_BOOST = 2.25
 
 // 动画相关变量
 let isAnimating = false
@@ -92,8 +93,8 @@ canvas.addEventListener('wheel', (e) => {
   })
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
-  // 计算目标滚动位置（可调节滚动敏感度）
-  const scrollSpeed = 0.4 // 降低滚动敏感度，减少每次偏移量 (0.1-1.0之间调节，越小越精细)
+  // 只提高当前窗口滚轮响应，不改用户保存的滚轮速度设置。
+  const scrollSpeed = userSettings.scrollSpeed * PROJECTOR_WHEEL_BOOST
   let targetOffset = scrollOffset + e.deltaY * scrollSpeed
   targetOffset = Math.max(0, Math.min(maxScroll, targetOffset))
   
@@ -107,13 +108,14 @@ canvas.addEventListener('click', (e) => {
   
   const rect = canvas.getBoundingClientRect()
   const clickY = e.clientY - rect.top + scrollOffset
-  const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * userSettings.lineHeight
+  const dualLanguage = !!currentData.meta.dualLanguage
+  const fontSizePx = (getRenderFontSize(fontSize, dualLanguage) / 100) * rect.height
+  const lineHeight = getRenderLineHeight(fontSizePx, dualLanguage)
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
   let currentY = paddingTop + titleHeight
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
+  const { maxWidth } = getDualLayoutMetrics(rect)
   
   // 临时创建canvas context来测量文本
   const tempCanvas = document.createElement('canvas')
@@ -123,7 +125,7 @@ canvas.addEventListener('click', (e) => {
   // 检查点击位置对应的经文
   for (let i = 0; i < currentData.verses.length; i++) {
     const verse = currentData.verses[i]
-    const verseHeight = measureVerseHeight(tempCtx, verse, maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage)
+    const verseHeight = measureVerseHeight(tempCtx, verse, maxWidth, lineHeight, maxWidth * 0.08, dualLanguage)
     
     if (clickY >= currentY && clickY < currentY + verseHeight) {
       // 点击的是当前经文
@@ -137,7 +139,7 @@ canvas.addEventListener('click', (e) => {
       return
     }
     
-    currentY += verseHeight + fontSizePx * 0.32
+    currentY += verseHeight + getVerseSpacing(fontSizePx)
   }
   
   // 如果点击的不是任何经文，取消高亮
@@ -168,6 +170,8 @@ document.addEventListener('keydown', (e) => {
         animateHighlight(highlightedVerse, highlightedVerse + 1)
       } else if (highlightedVerse === -1 && currentData.verses.length > 0) {
         animateHighlight(-1, 0) // 从第一个开始
+      } else if (highlightedVerse === currentData.verses.length - 1) {
+        appendNextVerse()
       }
       break
       
@@ -179,6 +183,32 @@ document.addEventListener('keydown', (e) => {
       break
   }
 })
+
+async function appendNextVerse() {
+  if (!currentData) return
+
+  const { meta } = currentData
+  const currentMaxVerse = Math.max(...currentData.verses.map(v => Number(v.VerseSN)))
+
+  try {
+    const nextVerseResult = await window.api.getNextVerse(meta.py, meta.chapter, currentMaxVerse, {
+      dualLanguage: !!meta.dualLanguage,
+      primaryVersion: meta.primaryVersion || 'CUNPSS',
+      secondaryVersion: meta.secondaryVersion || 'NR06'
+    })
+
+    if (nextVerseResult.error || !nextVerseResult.verses?.length) return
+
+    const newVerse = nextVerseResult.verses[0]
+    currentData.verses.push(newVerse)
+    currentData.meta.range[1] = newVerse.VerseSN
+    const newVerseIndex = currentData.verses.length - 1
+    renderContent()
+    animateHighlight(highlightedVerse, newVerseIndex)
+  } catch (error) {
+    console.error('Projector append next verse failed:', error)
+  }
+}
 
 // 窗口大小变化时重新设置Canvas
 window.addEventListener('resize', () => {
@@ -291,10 +321,12 @@ function scrollToVerse(verseIndex) {
   if (!currentData || verseIndex < 0 || verseIndex >= currentData.verses.length) return
   
   const rect = canvas.getBoundingClientRect()
-  const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * userSettings.lineHeight
+  const dualLanguage = !!currentData.meta.dualLanguage
+  const fontSizePx = (getRenderFontSize(fontSize, dualLanguage) / 100) * rect.height
+  const lineHeight = getRenderLineHeight(fontSizePx, dualLanguage)
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
+  const { maxWidth } = getDualLayoutMetrics(rect)
   
   // 计算内容开始位置，根据固定标题设置
   let targetY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
@@ -306,8 +338,7 @@ function scrollToVerse(verseIndex) {
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
-    const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage) + fontSizePx * 0.32
+    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.08, dualLanguage) + getVerseSpacing(fontSizePx)
   }
   
   // 设置滚动位置使目标经文在可见区域的合适位置

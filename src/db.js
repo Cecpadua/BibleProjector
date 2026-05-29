@@ -157,6 +157,34 @@ function getVerseRange(py, chapter) {
   }
 }
 
+function getTranslationText(volumeSN, chapter, verseSN, versionId) {
+  const translation = translations.get(versionId)
+  if (!translation) return ''
+
+  const book = translation.data?.[String(volumeSN)]
+  const chapterData = book?.[String(chapter)]
+  return chapterData?.[String(verseSN)] || ''
+}
+
+function applyPrimaryVersion(rows, volumeSN, chapter, versionId) {
+  if (!versionId || versionId === 'CUNPSS') {
+    return rows.map(row => ({
+      ...row,
+      primaryVersion: 'CUNPSS'
+    }))
+  }
+
+  return rows.map(row => {
+    const translatedText = getTranslationText(volumeSN, chapter, row.VerseSN, versionId)
+    return {
+      ...row,
+      primaryVersion: versionId,
+      originalText: row.strjw,
+      strjw: translatedText || row.strjw
+    }
+  })
+}
+
 function attachTranslation(rows, volumeSN, chapter, versionId) {
   if (!versionId || versionId === 'CUNPSS') return rows
 
@@ -172,6 +200,20 @@ function attachTranslation(rows, volumeSN, chapter, versionId) {
     secondaryVersion: versionId,
     secondaryText: chapterData[String(row.VerseSN)] || ''
   }))
+}
+
+function attachSecondaryVersion(rows, baseRows, volumeSN, chapter, versionId) {
+  if (!versionId) return rows
+
+  if (versionId === 'CUNPSS') {
+    return rows.map((row, index) => ({
+      ...row,
+      secondaryVersion: versionId,
+      secondaryText: baseRows[index]?.strjw || ''
+    }))
+  }
+
+  return attachTranslation(rows, volumeSN, chapter, versionId)
 }
 
 function getVersesByRef(input, options = {}) {
@@ -199,8 +241,11 @@ function getVersesByRef(input, options = {}) {
             ORDER BY id ASC`)
     const volumeSN = Number.parseInt(bookRow.VolumeSN)
     const rows = verseStmt.all(volumeSN, ref.chapter, vFrom, vTo)
-    const secondaryVersion = options.dualLanguage ? (options.secondaryVersion || 'NR06') : null
-    const verses = attachTranslation(rows, volumeSN, ref.chapter, secondaryVersion)
+    const primaryVersion = options.primaryVersion || 'CUNPSS'
+    const requestedSecondaryVersion = options.dualLanguage ? (options.secondaryVersion || 'NR06') : null
+    const secondaryVersion = requestedSecondaryVersion === primaryVersion ? null : requestedSecondaryVersion
+    const primaryRows = applyPrimaryVersion(rows, volumeSN, ref.chapter, primaryVersion)
+    const verses = attachSecondaryVersion(primaryRows, rows, volumeSN, ref.chapter, secondaryVersion)
     
     Logger.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
     
@@ -210,9 +255,9 @@ function getVersesByRef(input, options = {}) {
         book: bookRow.FullName,
         chapter: ref.chapter,
         range: [vFrom, vTo],
-        primaryVersion: 'CUNPSS',
+        primaryVersion,
         secondaryVersion,
-        dualLanguage: !!options.dualLanguage
+        dualLanguage: !!(options.dualLanguage && secondaryVersion)
       },
       versions: getAvailableVersions(),
       verses

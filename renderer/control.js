@@ -1,4 +1,4 @@
-import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS, measureContentHeight, measureVerseHeight } from "./common.js"
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS, measureContentHeight, measureVerseHeight, getDualLayoutMetrics, getRenderFontSize, getRenderLineHeight, getVerseSpacing } from "./common.js"
 import KeyRecorder from "./libs/key-recorder.js"
 // control.js - Canvas版本
 const quick = document.getElementById('quick')
@@ -72,9 +72,10 @@ let aspect = 16/9 // 默认比例
 let currentSuggestions = []
 let currentData = null
 let availableVersions = []
-let currentFontSize = 8 // 与HTML中的默认值保持一致
+let currentFontSize = 7 // 与HTML中的默认值保持一致
 let previewScrollOffset = 0
 let highlightedVerse = -1 // 当前高亮的经文索引，-1表示无高亮
+const PREVIEW_WHEEL_BOOST = 2.25
 
 
 // 动画和双击检测相关
@@ -117,8 +118,8 @@ function getSearchOptions() {
 
 async function loadVersions() {
   availableVersions = await window.api.getVersions()
-  const primaryVersions = availableVersions.filter(v => v.language === 'zh')
-  const secondaryVersions = availableVersions.filter(v => v.language !== 'zh')
+  const primaryVersions = availableVersions
+  const secondaryVersions = availableVersions
 
   primaryVersion.innerHTML = primaryVersions.map(v => `<option value="${v.id}">${v.id} · ${v.name}</option>`).join('')
   secondaryVersion.innerHTML = secondaryVersions.map(v => `<option value="${v.id}">${v.id} · ${v.name}</option>`).join('')
@@ -138,7 +139,7 @@ function updateVersionSummary() {
   const secondary = secondaryVersion?.value || 'NR06'
   if (secondaryVersion) secondaryVersion.disabled = !dualLanguage.checked
   versionSummary.textContent = dualLanguage.checked
-    ? `中文版本：${primary} · ${getVersionName(primary)}    第二译本：${secondary} · ${getVersionName(secondary)}`
+    ? `主版本：${primary} · ${getVersionName(primary)}    第二译本：${secondary} · ${getVersionName(secondary)}`
     : `当前版本：${primary} · ${getVersionName(primary)}`
 }
 
@@ -316,8 +317,8 @@ function renderVerses(payload) {
   headerTitle.textContent = '控制面板'
   const secondName = m.secondaryVersion ? getVersionName(m.secondaryVersion) : ''
   versionSummary.textContent = m.dualLanguage && m.secondaryVersion
-    ? `中文版本：${m.primaryVersion || 'CUNPSS'}    ${m.secondaryVersion} · ${secondName}`
-    : `中文版本：${m.primaryVersion || 'CUNPSS'}`
+    ? `主版本：${m.primaryVersion || 'CUNPSS'}    ${m.secondaryVersion} · ${secondName}`
+    : `当前版本：${m.primaryVersion || 'CUNPSS'} · ${getVersionName(m.primaryVersion || 'CUNPSS')}`
   
   // 保存数据并渲染Canvas
   currentData = payload
@@ -825,8 +826,8 @@ preview.addEventListener('wheel', (e) => {
   })
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
-  // 计算目标滚动位置（使用用户设置的滚轮速度）
-  let targetOffset = previewScrollOffset + e.deltaY * userSettings.scrollSpeed
+  // 计算目标滚动位置；只提高预览响应，不改用户保存的滚轮速度设置。
+  let targetOffset = previewScrollOffset + e.deltaY * userSettings.scrollSpeed * PREVIEW_WHEEL_BOOST
   targetOffset = Math.max(0, Math.min(maxScroll, targetOffset))
   
   // 使用平滑滚动提供丝滑体验
@@ -1008,10 +1009,12 @@ function scrollToVerse(verseIndex) {
   if (!currentData || verseIndex < 0 || verseIndex >= currentData.verses.length) return
   
   const rect = preview.getBoundingClientRect()
-  const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
-  const lineHeight = fontSizePx * userSettings.lineHeight
+  const dualLanguage = !!currentData.meta.dualLanguage
+  const fontSizePx = (getRenderFontSize(userSettings.fontSize, dualLanguage) / 100) * rect.height
+  const lineHeight = getRenderLineHeight(fontSizePx, dualLanguage)
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
+  const { maxWidth } = getDualLayoutMetrics(rect)
   
   // 计算内容开始位置，根据固定标题设置
   let targetY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
@@ -1023,8 +1026,7 @@ function scrollToVerse(verseIndex) {
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
-    const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage) + fontSizePx * 0.32
+    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.08, dualLanguage) + getVerseSpacing(fontSizePx)
   }
   
   // 设置滚动位置使目标经文在可见区域的合适位置
@@ -1045,10 +1047,12 @@ preview.addEventListener('click', (e) => {
   
   const rect = preview.getBoundingClientRect()
   const clickY = e.clientY - rect.top + previewScrollOffset
-  const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
-  const lineHeight = fontSizePx * userSettings.lineHeight
+  const dualLanguage = !!currentData.meta.dualLanguage
+  const fontSizePx = (getRenderFontSize(userSettings.fontSize, dualLanguage) / 100) * rect.height
+  const lineHeight = getRenderLineHeight(fontSizePx, dualLanguage)
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
+  const { maxWidth } = getDualLayoutMetrics(rect)
   
   // 计算内容开始位置，根据固定标题设置
   let currentY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
@@ -1058,8 +1062,6 @@ preview.addEventListener('click', (e) => {
     currentY += titleHeight
   }
   
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-  
   // 临时创建canvas context来测量文本
   const tempCanvas = document.createElement('canvas')
   const tempCtx = tempCanvas.getContext('2d')
@@ -1067,7 +1069,7 @@ preview.addEventListener('click', (e) => {
   
   // 检查点击位置对应的经文
   for (let i = 0; i < currentData.verses.length; i++) {
-    const verseHeight = measureVerseHeight(tempCtx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage)
+    const verseHeight = measureVerseHeight(tempCtx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.08, dualLanguage)
     
     if (clickY >= currentY && clickY < currentY + verseHeight) {
       // 点击的是当前经文
@@ -1081,7 +1083,7 @@ preview.addEventListener('click', (e) => {
       return
     }
     
-    currentY += verseHeight + fontSizePx * 0.32
+    currentY += verseHeight + getVerseSpacing(fontSizePx)
   }
   
   // 如果点击的不是任何经文，取消高亮
@@ -1096,8 +1098,9 @@ preview.addEventListener('contextmenu', (e) => {
   
   const rect = preview.getBoundingClientRect()
   const clickY = e.clientY - rect.top + previewScrollOffset
-  const fontSizePx = (userSettings.fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
+  const dualLanguage = !!currentData.meta.dualLanguage
+  const fontSizePx = (getRenderFontSize(userSettings.fontSize, dualLanguage) / 100) * rect.height
+  const lineHeight = getRenderLineHeight(fontSizePx, dualLanguage)
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
@@ -1107,7 +1110,7 @@ preview.addEventListener('contextmenu', (e) => {
     currentY += titleHeight
   }
   
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
+  const { maxWidth } = getDualLayoutMetrics(rect)
   const tempCanvas = document.createElement('canvas')
   const tempCtx = tempCanvas.getContext('2d')
   tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
@@ -1166,6 +1169,8 @@ document.addEventListener('keydown', (e) => {
           highlightVerse(highlightedVerse + 1, true)
         } else if (highlightedVerse === -1 && currentData.verses.length > 0) {
           highlightVerse(0, true) // 从第一个开始
+        } else if (highlightedVerse === currentData.verses.length - 1) {
+          appendNextVerse()
         }
       }
       break

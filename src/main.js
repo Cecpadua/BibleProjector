@@ -22,7 +22,7 @@ const store = new Store({
       defaults: {
         projectorDisplayId: null,
         autoLaunch: true, // 是否开机自启
-        fontSize: 8,  // 字体大小
+        fontSize: 7,  // 字体大小
         textColor: '#ffffff', // 文字颜色
         backgroundColor: '#000000', // 背景颜色
         highlightBackgroundColor: '#1e90ff', // 高亮背景颜色
@@ -84,6 +84,7 @@ async function initializeApp() {
         try {
           const defaultResult = await getVersesByRef('CSJ 1 1', {
             dualLanguage: store.get('dualLanguage'),
+            primaryVersion: store.get('primaryVersion'),
             secondaryVersion: store.get('secondaryVersion')
           })
           controlWin.webContents.send('default-content', defaultResult)
