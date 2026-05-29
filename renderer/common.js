@@ -7,6 +7,9 @@ export let userSettings = {
   scrollSpeed: 0.4, // 滚轮速度 (0.1-1.0)
   fixedTitle: true ,
   lineHeight: 1.6,
+  dualLanguage: true,
+  primaryVersion: 'CUNPSS',
+  secondaryVersion: 'NR06',
   // 快捷键设置
   keyPrevVerse: 'ArrowUp',
   keyNextVerse: 'ArrowDown',
@@ -16,6 +19,45 @@ export let userSettings = {
 
 export async function resetSettings() {
 userSettings = await window.api.getDefaultSettings()
+}
+
+export function getVerseText(verse, language = 'primary') {
+  if (language === 'secondary') {
+    return `${verse.VerseSN}  ${verse.secondaryText || ''}`.trim()
+  }
+  return `${verse.VerseSN}. ${verse.strjw}`
+}
+
+export function measureVerseHeight(ctx, verse, maxWidth, lineHeight, gap = 0, dualLanguage = false) {
+  if (!dualLanguage) {
+    return wrapText(ctx, getVerseText(verse), maxWidth).length * lineHeight
+  }
+
+  const columnGap = gap || Math.max(18, maxWidth * 0.04)
+  const columnWidth = Math.max(40, (maxWidth - columnGap) / 2)
+  const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
+  const secondaryLines = wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth)
+  return Math.max(primaryLines.length, secondaryLines.length) * lineHeight
+}
+
+export function measureContentHeight({ ctx, currentData, canvasElement, fontSize, dualLanguage }) {
+  if (!currentData || !ctx || !canvasElement) return 0
+
+  const rect = canvasElement.getBoundingClientRect()
+  const fontSizePx = (fontSize / 100) * rect.height
+  const lineHeight = fontSizePx * userSettings.lineHeight
+  const padding = rect.width * 0.06
+  const paddingTop = rect.height * 0.04
+  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
+  const maxWidth = Math.floor(rect.width - padding * 2)
+
+  let contentHeight = paddingTop + titleHeight + 10
+  currentData.verses.forEach(verse => {
+    contentHeight += measureVerseHeight(ctx, verse, maxWidth, lineHeight, maxWidth * 0.05, dualLanguage)
+    contentHeight += fontSizePx * 0.32
+  })
+  contentHeight += lineHeight * 3
+  return contentHeight
 }
 
 export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, canvasElement, scrollOffsetValue }) {
@@ -39,6 +81,7 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
   // 渲染标题
   const { meta, verses } = currentData
   const metaText = `${meta.book} 第${meta.chapter}章 ${meta.range[0]}-${meta.range[1]}`
+  const dualLanguage = !!(meta.dualLanguage && meta.secondaryVersion)
   const titleFontSize = fontSizePx * 0.7
   const titleHeight = titleFontSize + rect.height * 0.01
 
@@ -70,9 +113,12 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
   console.log(`Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}, fixedTitle=${userSettings.fixedTitle}`)
 
   verses.forEach((verse, verseIndex) => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(ctx, text, maxWidth)
-    const verseHeight = lines.length * lineHeight
+    const columnGap = Math.max(18, maxWidth * 0.05)
+    const columnWidth = dualLanguage ? Math.floor((maxWidth - columnGap) / 2) : maxWidth
+    const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
+    const secondaryLines = dualLanguage ? wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth) : []
+    const lineCount = dualLanguage ? Math.max(primaryLines.length, secondaryLines.length) : primaryLines.length
+    const verseHeight = lineCount * lineHeight
     const verseStartY = y
 
     // 高亮
@@ -85,11 +131,9 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
       ctx.fillRect(padding - 5, highlightStartY, rect.width - padding * 2 + 10, highlightHeight)
     }
 
-    // 文本颜色
     ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : userSettings.textColor
 
-    // 渲染每一行
-    lines.forEach(lineText => {
+    primaryLines.forEach(lineText => {
       const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
       if (y >= minY && y <= rect.height) {
         ctx.fillText(lineText, padding, y)
@@ -97,7 +141,21 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
       y += lineHeight
     })
 
-    y += fontSizePx * 0.2
+    if (dualLanguage) {
+      const secondaryX = padding + columnWidth + columnGap
+      let secondaryY = verseStartY
+      ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : '#7da7ff'
+      secondaryLines.forEach(lineText => {
+        const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
+        if (secondaryY >= minY && secondaryY <= rect.height) {
+          ctx.fillText(lineText, secondaryX, secondaryY)
+        }
+        secondaryY += lineHeight
+      })
+      y = verseStartY + verseHeight
+    }
+
+    y += fontSizePx * 0.32
   })
 
   // 底部额外空行

@@ -1,6 +1,6 @@
 {
   "name": "cecp-projection",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "CECP圣经投影软件",
   "main": "./src/main.js",
   "type": "module",
@@ -155,7 +155,10 @@
     }
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "CECP",
+    "email": "cecpadua@gmail.com"
+  },
   "license": "ISC",
   "dependencies": {
     "better-sqlite3": "^12.2.0",

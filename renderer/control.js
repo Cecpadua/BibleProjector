@@ -1,9 +1,10 @@
-import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS } from "./common.js"
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, resetSettings as RS, measureContentHeight, measureVerseHeight } from "./common.js"
 import KeyRecorder from "./libs/key-recorder.js"
 // control.js - Canvas版本
 const quick = document.getElementById('quick')
 const preview = document.getElementById('preview') // Canvas元素
 const meta = document.getElementById('meta')
+const headerTitle = document.getElementById('headerTitle')
 const btnToggle = document.getElementById('btnToggle')
 const btnExit = document.getElementById('btnExit')
 const btnSettings = document.getElementById('btnSettings')
@@ -19,6 +20,10 @@ const suggestions = document.getElementById('suggestions')
 const fontSize = document.getElementById('fontSize')
 const fontSizeValue = document.getElementById('fontSizeValue')
 const selHistory = document.getElementById('history')
+const dualLanguage = document.getElementById('dualLanguage')
+const primaryVersion = document.getElementById('primaryVersion')
+const secondaryVersion = document.getElementById('secondaryVersion')
+const versionSummary = document.getElementById('versionSummary')
 
 // 设置控件引用
 const settingFontSize = document.getElementById('settingFontSize')
@@ -66,6 +71,7 @@ let projectorRunning = false
 let aspect = 16/9 // 默认比例
 let currentSuggestions = []
 let currentData = null
+let availableVersions = []
 let currentFontSize = 8 // 与HTML中的默认值保持一致
 let previewScrollOffset = 0
 let highlightedVerse = -1 // 当前高亮的经文索引，-1表示无高亮
@@ -101,6 +107,45 @@ async function loadDisplays() {
   if (selectedDisplay) setPreviewAspect(selectedDisplay.width, selectedDisplay.height)
 }
 
+function getSearchOptions() {
+  return {
+    dualLanguage: !!dualLanguage?.checked,
+    primaryVersion: primaryVersion?.value || 'CUNPSS',
+    secondaryVersion: secondaryVersion?.value || 'NR06'
+  }
+}
+
+async function loadVersions() {
+  availableVersions = await window.api.getVersions()
+  const primaryVersions = availableVersions.filter(v => v.language === 'zh')
+  const secondaryVersions = availableVersions.filter(v => v.language !== 'zh')
+
+  primaryVersion.innerHTML = primaryVersions.map(v => `<option value="${v.id}">${v.id} · ${v.name}</option>`).join('')
+  secondaryVersion.innerHTML = secondaryVersions.map(v => `<option value="${v.id}">${v.id} · ${v.name}</option>`).join('')
+
+  primaryVersion.value = await window.api.getSetting('primaryVersion') || 'CUNPSS'
+  secondaryVersion.value = await window.api.getSetting('secondaryVersion') || 'NR06'
+  dualLanguage.checked = (await window.api.getSetting('dualLanguage')) !== false
+  updateVersionSummary()
+}
+
+function getVersionName(id) {
+  return availableVersions.find(v => v.id === id)?.name || id
+}
+
+function updateVersionSummary() {
+  const primary = primaryVersion?.value || 'CUNPSS'
+  const secondary = secondaryVersion?.value || 'NR06'
+  if (secondaryVersion) secondaryVersion.disabled = !dualLanguage.checked
+  versionSummary.textContent = dualLanguage.checked
+    ? `中文版本：${primary} · ${getVersionName(primary)}    第二译本：${secondary} · ${getVersionName(secondary)}`
+    : `当前版本：${primary} · ${getVersionName(primary)}`
+}
+
+function getChapterLimit(book) {
+  return Number(String(book?.chapters || '').split('-').pop())
+}
+
 function setPreviewAspect(w, h) {
   aspect = w / h
   // 让预览高度跟随宽度计算
@@ -117,6 +162,15 @@ const setupPreviewCanvas = () => SC(preview, ctx, renderPreviewContent)
 
 // 渲染预览内容（与投影窗口相同的渲染逻辑）
 const renderPreviewContent = () => renderCanvasContent({ ctx, currentData, highlightedVerse, canvasElement: preview, scrollOffsetValue: previewScrollOffset })
+
+async function refreshCurrentSearch() {
+  if (currentData) {
+    const { meta: m } = currentData
+    await doSearch(`${m.py} ${m.chapter} ${m.range[0]} ${m.range[1]}`)
+  } else if (quick.value.trim()) {
+    await doSearch(quick.value)
+  }
+}
 
 
 // 平滑滚动到目标位置（恢复丝滑效果）
@@ -241,27 +295,15 @@ function updateHistorySelect() {
 // 同步滚动到投影窗口（独立函数，避免重复计算）
 function syncScrollToProjector() {
   if (!currentData) return
-  
+
   const rect = preview.getBoundingClientRect()
-  const fontSizePx = (currentFontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
-  const paddingTop = rect.height * 0.04
-  const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
-  
-  let contentHeight = paddingTop + titleHeight
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-  
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
-  tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  currentData.verses.forEach(verse => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    contentHeight += lines.length * lineHeight + fontSizePx * 0.2
+  const contentHeight = measureContentHeight({
+    ctx,
+    currentData,
+    canvasElement: preview,
+    fontSize: currentFontSize,
+    dualLanguage: !!currentData.meta.dualLanguage
   })
-  
-  contentHeight += lineHeight * 3
   const maxScroll = Math.max(0, contentHeight - rect.height)
   const percent = maxScroll > 0 ? previewScrollOffset / maxScroll : 0
   console.log(`Control scroll: offset=${previewScrollOffset}, maxScroll=${maxScroll}, percent=${percent}`)
@@ -271,6 +313,11 @@ function syncScrollToProjector() {
 function renderVerses(payload) {
   const { meta: m, verses } = payload
   meta.textContent = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}`
+  headerTitle.textContent = '控制面板'
+  const secondName = m.secondaryVersion ? getVersionName(m.secondaryVersion) : ''
+  versionSummary.textContent = m.dualLanguage && m.secondaryVersion
+    ? `中文版本：${m.primaryVersion || 'CUNPSS'}    ${m.secondaryVersion} · ${secondName}`
+    : `中文版本：${m.primaryVersion || 'CUNPSS'}`
   
   // 保存数据并渲染Canvas
   currentData = payload
@@ -303,8 +350,9 @@ async function validateInput(text) {
       const book = bookSuggestions[0]
       
       // 检查章节是否超出范围
-      if (isNaN(chapter) || chapter < 1 || chapter > book.chapters) {
-        return { valid: false, message: `章节超出范围 (1-${book.chapters})` }
+      const chapterLimit = getChapterLimit(book)
+      if (isNaN(chapter) || chapter < 1 || chapter > chapterLimit) {
+        return { valid: false, message: `章节超出范围 (1-${chapterLimit})` }
       }
       
       // 如果有节数，检查节数范围
@@ -365,7 +413,8 @@ async function doSearch(text) {
   quick.classList.remove('error')
   
   try {
-    const res = await window.api.search(text)
+    const res = await window.api.search(text, getSearchOptions())
+    if (res.error) throw new Error(res.error)
     renderVerses(res)
     hideSuggestions()
     
@@ -442,8 +491,9 @@ async function showSuggestions(input) {
         const chapter = parseInt(parts[1])
         if (!isNaN(chapter)) {
           // 检查章节范围
-          if (chapter > book.chapters) {
-            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+          const chapterLimit = getChapterLimit(book)
+          if (chapter > chapterLimit) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${chapterLimit}章)`)
             return
           } else if (chapter < 1) {
             showErrorSuggestion(`章节号不能小于1`)
@@ -483,8 +533,9 @@ async function showSuggestions(input) {
           }
           
           const book = bookSuggestions[0]
-          if (chapter > book.chapters) {
-            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+          const chapterLimit = getChapterLimit(book)
+          if (chapter > chapterLimit) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${chapterLimit}章)`)
             return
           } else if (chapter < 1) {
             showErrorSuggestion(`章节号不能小于1`)
@@ -527,8 +578,9 @@ async function showSuggestions(input) {
           }
           
           const book = bookSuggestions[0]
-          if (chapter > book.chapters) {
-            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+          const chapterLimit = getChapterLimit(book)
+          if (chapter > chapterLimit) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${chapterLimit}章)`)
             return
           } else if (chapter < 1) {
             showErrorSuggestion(`章节号不能小于1`)
@@ -591,8 +643,9 @@ async function showSuggestions(input) {
           }
           
           const book = bookSuggestions[0]
-          if (chapter > book.chapters) {
-            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${book.chapters}章)`)
+          const chapterLimit = getChapterLimit(book)
+          if (chapter > chapterLimit) {
+            showErrorSuggestion(`${book.name}没有第${chapter}章 (最多${chapterLimit}章)`)
             return
           } else if (chapter < 1) {
             showErrorSuggestion(`章节号不能小于1`)
@@ -762,34 +815,14 @@ preview.addEventListener('wheel', (e) => {
   
   e.preventDefault()
   const rect = preview.getBoundingClientRect()
-  
-  // 精确计算总内容高度
-  const fontSizePx = (currentFontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
-  const paddingTop = rect.height * 0.04
-  
-  // 计算标题高度
-  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
-  
-  // 计算所有经文的高度
-  let contentHeight = paddingTop + titleHeight
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-  
-  // 临时创建canvas context来测量文本
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
-  tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  currentData.verses.forEach(verse => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    contentHeight += lines.length * lineHeight + fontSizePx * 0.2 // verse间距
+
+  const contentHeight = measureContentHeight({
+    ctx,
+    currentData,
+    canvasElement: preview,
+    fontSize: currentFontSize,
+    dualLanguage: !!currentData.meta.dualLanguage
   })
-  
-  // 底部额外空间
-  contentHeight += lineHeight * 3
-  
-  // 计算最大滚动距离
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
   // 计算目标滚动位置（使用用户设置的滚轮速度）
@@ -866,6 +899,24 @@ window.api.onProjectorClosed(() => {
   btnToggle.textContent = '开始投影'
 })
 
+dualLanguage.addEventListener('change', async () => {
+  applySetting('dualLanguage', dualLanguage.checked)
+  updateVersionSummary()
+  await refreshCurrentSearch()
+})
+
+primaryVersion.addEventListener('change', async () => {
+  applySetting('primaryVersion', primaryVersion.value)
+  updateVersionSummary()
+  await refreshCurrentSearch()
+})
+
+secondaryVersion.addEventListener('change', async () => {
+  applySetting('secondaryVersion', secondaryVersion.value)
+  updateVersionSummary()
+  await refreshCurrentSearch()
+})
+
 // 监听默认内容
 window.api.onDefaultContent((content) => {
   console.log('收到默认内容:', content)
@@ -893,6 +944,7 @@ if (document.readyState === 'loading') {
 
 // 初始化
 loadDisplays()
+loadVersions()
 setupPreviewCanvas()
 loadSearchHistory()  // 加载搜索历史记录
 
@@ -957,7 +1009,7 @@ function scrollToVerse(verseIndex) {
   
   const rect = preview.getBoundingClientRect()
   const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
-  const lineHeight = fontSizePx * 1.6
+  const lineHeight = fontSizePx * userSettings.lineHeight
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
   
@@ -971,17 +1023,8 @@ function scrollToVerse(verseIndex) {
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
-    const verse = currentData.verses[i]
-    const text = `${verse.VerseSN}. ${verse.strjw}`
     const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-    
-    // 临时创建canvas context来测量文本
-    const tempCanvas = document.createElement('canvas')
-    const tempCtx = tempCanvas.getContext('2d')
-    tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-    
-    const lines = wrapText(tempCtx, text, maxWidth)
-    targetY += lines.length * lineHeight + fontSizePx * 0.2
+    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage) + fontSizePx * 0.32
   }
   
   // 设置滚动位置使目标经文在可见区域的合适位置
@@ -1003,7 +1046,7 @@ preview.addEventListener('click', (e) => {
   const rect = preview.getBoundingClientRect()
   const clickY = e.clientY - rect.top + previewScrollOffset
   const fontSizePx = (userSettings.fontSize / 100) * rect.height // 使用用户设置的字体大小
-  const lineHeight = fontSizePx * 1.6
+  const lineHeight = fontSizePx * userSettings.lineHeight
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
@@ -1024,10 +1067,7 @@ preview.addEventListener('click', (e) => {
   
   // 检查点击位置对应的经文
   for (let i = 0; i < currentData.verses.length; i++) {
-    const verse = currentData.verses[i]
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    const verseHeight = lines.length * lineHeight
+    const verseHeight = measureVerseHeight(tempCtx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage)
     
     if (clickY >= currentY && clickY < currentY + verseHeight) {
       // 点击的是当前经文
@@ -1041,7 +1081,7 @@ preview.addEventListener('click', (e) => {
       return
     }
     
-    currentY += verseHeight + fontSizePx * 0.2
+    currentY += verseHeight + fontSizePx * 0.32
   }
   
   // 如果点击的不是任何经文，取消高亮
@@ -1143,12 +1183,12 @@ document.addEventListener('keydown', (e) => {
 async function appendNextVerse() {
   if (!currentData) return
   
-  const { meta } = currentData
+  const currentMeta = currentData.meta
   const currentMaxVerse = Math.max(...currentData.verses.map(v => v.VerseSN))
   
   try {
-    console.log(`尝试获取下一节: ${meta.py} ${meta.chapter} ${currentMaxVerse + 1}`)
-    const nextVerseResult = await window.api.getNextVerse(meta.py, meta.chapter, currentMaxVerse)
+    console.log(`尝试获取下一节: ${currentMeta.py} ${currentMeta.chapter} ${currentMaxVerse + 1}`)
+    const nextVerseResult = await window.api.getNextVerse(currentMeta.py, currentMeta.chapter, currentMaxVerse, getSearchOptions())
     if (nextVerseResult.error) {
       console.log('已经是本章最后一节，不追加')
       return
@@ -1168,6 +1208,7 @@ async function appendNextVerse() {
       // 更新显示
       const { meta: m } = currentData
       meta.textContent = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}`
+      updateVersionSummary()
       
       // 重新渲染
       renderPreviewContent()
@@ -1371,7 +1412,7 @@ async function resetSettings() {
   
   // 确认对话框
   if (confirm('确定要重置所有设置为默认值吗？')) {
-    RS()
+    await RS()
     // 更新UI控件
     updateSettingsUI()
     // 先清除旧设置，再逐个保存新设置
@@ -1552,6 +1593,11 @@ function updateSettingsUI() {
   // 更新行高
   settingLineHeight.value = userSettings.lineHeight
   settingLineHeightValue.textContent = userSettings.lineHeight.toFixed(2)
+
+  if (dualLanguage) dualLanguage.checked = userSettings.dualLanguage !== false
+  if (primaryVersion && userSettings.primaryVersion) primaryVersion.value = userSettings.primaryVersion
+  if (secondaryVersion && userSettings.secondaryVersion) secondaryVersion.value = userSettings.secondaryVersion
+  updateVersionSummary()
   
   // 更新快捷键设置
   settingPrevVerse.value = userSettings.keyPrevVerse || 'ArrowUp'
@@ -1698,6 +1744,9 @@ function getVerseText(verseIndex) {
   }
   
   const verse = currentData.verses[verseIndex]
+  if (currentData.meta.dualLanguage && verse.secondaryText) {
+    return `${verse.VerseSN}. ${verse.strjw}\n${verse.VerseSN}. ${verse.secondaryText}`
+  }
   return `${verse.VerseSN}. ${verse.strjw}`
 }
 
@@ -1716,7 +1765,12 @@ function getAllText() {
   
   const { meta: m, verses } = currentData
   const title = `${m.book} 第${m.chapter}章 ${m.range[0]}-${m.range[1]}\n\n`
-  const content = verses.map(verse => `${verse.VerseSN}. ${verse.strjw}`).join('\n')
+  const content = verses.map(verse => {
+    if (m.dualLanguage && verse.secondaryText) {
+      return `${verse.VerseSN}. ${verse.strjw}\n${verse.VerseSN}. ${verse.secondaryText}`
+    }
+    return `${verse.VerseSN}. ${verse.strjw}`
+  }).join('\n')
   
   return title + content
 }
