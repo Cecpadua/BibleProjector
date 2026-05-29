@@ -166,7 +166,7 @@ jobs:
       run: |
         VERSION="${{ steps.version.outputs.VERSION }}"
         VERSION_NO_V="${VERSION#v}"
-        npm version $VERSION_NO_V --no-git-tag-version
+        npm pkg set version="$VERSION_NO_V"
     
     - name: Install Linux dependencies
       if: matrix.os == 'ubuntu-latest'
