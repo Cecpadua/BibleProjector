@@ -33,11 +33,15 @@ export function measureVerseHeight(ctx, verse, maxWidth, lineHeight, gap = 0, du
     return wrapText(ctx, getVerseText(verse), maxWidth).length * lineHeight
   }
 
+  // 双语模式：返回左右栏各自独立的高度（不再取最大值）
   const columnGap = gap || Math.max(18, maxWidth * 0.04)
   const columnWidth = Math.max(40, (maxWidth - columnGap) / 2)
   const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
   const secondaryLines = wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth)
-  return Math.max(primaryLines.length, secondaryLines.length) * lineHeight
+  return {
+    primary: primaryLines.length * lineHeight,
+    secondary: secondaryLines.length * lineHeight,
+  }
 }
 
 export function measureContentHeight({ ctx, currentData, canvasElement, fontSize, dualLanguage }) {
@@ -51,9 +55,23 @@ export function measureContentHeight({ ctx, currentData, canvasElement, fontSize
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   const maxWidth = Math.floor(rect.width - padding * 2)
 
+  // 双语模式：左右栏独立累加，取最终最大值
+  if (dualLanguage) {
+    let primaryHeight = paddingTop + titleHeight + 10
+    let secondaryHeight = paddingTop + titleHeight + 10
+    currentData.verses.forEach(verse => {
+      const h = measureVerseHeight(ctx, verse, maxWidth, lineHeight, maxWidth * 0.05, true)
+      primaryHeight += h.primary + fontSizePx * 0.32
+      secondaryHeight += h.secondary + fontSizePx * 0.32
+    })
+    primaryHeight += lineHeight * 3
+    secondaryHeight += lineHeight * 3
+    return Math.max(primaryHeight, secondaryHeight)
+  }
+
   let contentHeight = paddingTop + titleHeight + 10
   currentData.verses.forEach(verse => {
-    contentHeight += measureVerseHeight(ctx, verse, maxWidth, lineHeight, maxWidth * 0.05, dualLanguage)
+    contentHeight += measureVerseHeight(ctx, verse, maxWidth, lineHeight, maxWidth * 0.05, false)
     contentHeight += fontSizePx * 0.32
   })
   contentHeight += lineHeight * 3
@@ -112,51 +130,78 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
 
   console.log(`Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}, fixedTitle=${userSettings.fixedTitle}`)
 
-  verses.forEach((verse, verseIndex) => {
+  if (dualLanguage) {
+    // 双语模式：左右栏各自独立 y 坐标，互不影响
     const columnGap = Math.max(18, maxWidth * 0.05)
-    const columnWidth = dualLanguage ? Math.floor((maxWidth - columnGap) / 2) : maxWidth
-    const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
-    const secondaryLines = dualLanguage ? wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth) : []
-    const lineCount = dualLanguage ? Math.max(primaryLines.length, secondaryLines.length) : primaryLines.length
-    const verseHeight = lineCount * lineHeight
-    const verseStartY = y
+    const columnWidth = Math.floor((maxWidth - columnGap) / 2)
+    const secondaryX = padding + columnWidth + columnGap
+    const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
 
-    // 高亮
-    if (highlightedVerse === verseIndex) {
-      const rgba = hexToRgba(userSettings.highlightBackgroundColor, 0.3)
-      ctx.fillStyle = rgba
+    let primaryY = y
+    let secondaryY = y
 
-      const highlightStartY = userSettings.fixedTitle ? (verseStartY - verseStartY * 0.10) : verseStartY - verseStartY * 0.1
-      const highlightHeight = userSettings.fixedTitle ? Math.min(verseHeight, rect.height - highlightStartY) : verseHeight
-      ctx.fillRect(padding - 5, highlightStartY, rect.width - padding * 2 + 10, highlightHeight)
-    }
+    verses.forEach((verse, verseIndex) => {
+      const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
+      const secondaryLines = wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth)
 
-    ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : userSettings.textColor
-
-    primaryLines.forEach(lineText => {
-      const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
-      if (y >= minY && y <= rect.height) {
-        ctx.fillText(lineText, padding, y)
+      // 高亮背景：用左栏当前位置
+      if (highlightedVerse === verseIndex) {
+        const rgba = hexToRgba(userSettings.highlightBackgroundColor, 0.3)
+        ctx.fillStyle = rgba
+        const hlY = primaryY
+        const hlH = primaryLines.length * lineHeight
+        const clampedY = Math.max(hlY, contentStartY)
+        const clampedH = Math.min(hlH, rect.height - clampedY)
+        ctx.fillRect(padding - 5, clampedY, rect.width - padding * 2 + 10, clampedH)
       }
-      y += lineHeight
-    })
 
-    if (dualLanguage) {
-      const secondaryX = padding + columnWidth + columnGap
-      let secondaryY = verseStartY
+      // 渲染左栏（中文）
+      ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
+      ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : userSettings.textColor
+      primaryLines.forEach(lineText => {
+        if (primaryY >= minY && primaryY <= rect.height) {
+          ctx.fillText(lineText, padding, primaryY)
+        }
+        primaryY += lineHeight
+      })
+      primaryY += fontSizePx * 0.32
+
+      // 渲染右栏（意大利文）
       ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : '#7da7ff'
       secondaryLines.forEach(lineText => {
-        const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
         if (secondaryY >= minY && secondaryY <= rect.height) {
           ctx.fillText(lineText, secondaryX, secondaryY)
         }
         secondaryY += lineHeight
       })
-      y = verseStartY + verseHeight
-    }
+      secondaryY += fontSizePx * 0.32
+    })
+  } else {
+    verses.forEach((verse, verseIndex) => {
+      const primaryLines = wrapText(ctx, getVerseText(verse), maxWidth)
+      const verseHeight = primaryLines.length * lineHeight
+      const verseStartY = y
 
-    y += fontSizePx * 0.32
-  })
+      // 高亮
+      if (highlightedVerse === verseIndex) {
+        const rgba = hexToRgba(userSettings.highlightBackgroundColor, 0.3)
+        ctx.fillStyle = rgba
+        const highlightStartY = userSettings.fixedTitle ? (verseStartY - verseStartY * 0.10) : verseStartY - verseStartY * 0.1
+        const highlightHeight = userSettings.fixedTitle ? Math.min(verseHeight, rect.height - highlightStartY) : verseHeight
+        ctx.fillRect(padding - 5, highlightStartY, rect.width - padding * 2 + 10, highlightHeight)
+      }
+
+      ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : userSettings.textColor
+      primaryLines.forEach(lineText => {
+        const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
+        if (y >= minY && y <= rect.height) {
+          ctx.fillText(lineText, padding, y)
+        }
+        y += lineHeight
+      })
+      y += fontSizePx * 0.32
+    })
+  }
 
   // 底部额外空行
   y += lineHeight * 3
