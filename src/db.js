@@ -1,9 +1,20 @@
 // db.js（使用 better-sqlite3 模块）
 import { createRequire } from 'module'
+import fs from 'fs'
 import Logger from './utils/logger.js'
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3')
 let db = null
+const translations = new Map()
+
+const builtInVersions = [
+  {
+    id: 'CUNPSS',
+    name: '和合本（默）',
+    language: 'zh',
+    source: 'sqlite'
+  }
+]
 
 async function initDB(dbPath) {
   Logger.info('Initializing database:', dbPath)
@@ -22,6 +33,37 @@ function closeDB() {
     db.close()
     db = null
   }
+}
+
+async function initTranslations(files = []) {
+  translations.clear()
+
+  for (const file of files) {
+    try {
+      if (!fs.existsSync(file.path)) {
+        Logger.warn('Translation file not found:', file.path)
+        continue
+      }
+
+      const data = JSON.parse(fs.readFileSync(file.path, 'utf-8'))
+      translations.set(file.id, {
+        id: file.id,
+        name: file.name,
+        language: file.language,
+        data
+      })
+      Logger.info(`Translation loaded: ${file.id}`)
+    } catch (err) {
+      Logger.error(`Failed to load translation ${file.id}:`, err.message)
+    }
+  }
+}
+
+function getAvailableVersions() {
+  return [
+    ...builtInVersions,
+    ...Array.from(translations.values()).map(({ id, name, language }) => ({ id, name, language, source: 'json' }))
+  ]
 }
 
 function parseRef(input) {
@@ -115,7 +157,24 @@ function getVerseRange(py, chapter) {
   }
 }
 
-function getVersesByRef(input) {
+function attachTranslation(rows, volumeSN, chapter, versionId) {
+  if (!versionId || versionId === 'CUNPSS') return rows
+
+  const translation = translations.get(versionId)
+  if (!translation) return rows
+
+  const book = translation.data?.[String(volumeSN)]
+  const chapterData = book?.[String(chapter)]
+  if (!chapterData) return rows
+
+  return rows.map(row => ({
+    ...row,
+    secondaryVersion: versionId,
+    secondaryText: chapterData[String(row.VerseSN)] || ''
+  }))
+}
+
+function getVersesByRef(input, options = {}) {
   try {
     const ref = parseRef(input)
     Logger.log('查询经文:', ref)
@@ -138,7 +197,10 @@ function getVersesByRef(input) {
     const verseStmt = db.prepare(`SELECT CAST(id AS INT) as id, VolumeSN, ChapterSN, VerseSN, strjw FROM bible
             WHERE VolumeSN = ? AND ChapterSN = ? AND (VerseSN BETWEEN ? AND ?)
             ORDER BY id ASC`)
-    const rows = verseStmt.all(Number.parseInt(bookRow.VolumeSN), ref.chapter, vFrom, vTo)
+    const volumeSN = Number.parseInt(bookRow.VolumeSN)
+    const rows = verseStmt.all(volumeSN, ref.chapter, vFrom, vTo)
+    const secondaryVersion = options.dualLanguage ? (options.secondaryVersion || 'NR06') : null
+    const verses = attachTranslation(rows, volumeSN, ref.chapter, secondaryVersion)
     
     Logger.log(`查询结果:`, [bookRow.VolumeSN, ref.chapter, vFrom, vTo])
     
@@ -147,13 +209,17 @@ function getVersesByRef(input) {
         py: ref.py,
         book: bookRow.FullName,
         chapter: ref.chapter,
-        range: [vFrom, vTo]
+        range: [vFrom, vTo],
+        primaryVersion: 'CUNPSS',
+        secondaryVersion,
+        dualLanguage: !!options.dualLanguage
       },
-      verses: rows
+      versions: getAvailableVersions(),
+      verses
     })
   } catch (err) {
     return Promise.reject(err)
   }
 }
 
-export { initDB, closeDB, getVersesByRef, getBookSuggestions, getVerseRange }
+export { initDB, initTranslations, closeDB, getVersesByRef, getBookSuggestions, getVerseRange, getAvailableVersions }

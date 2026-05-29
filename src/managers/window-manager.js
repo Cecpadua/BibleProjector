@@ -16,8 +16,8 @@ class WindowManager {
 
   createControlWindow() {
     this.controlWin = new BrowserWindow({
-      width: 400,//420,
-      height: 550,//560,
+      width: 400,
+      height: 720,
       frame: false,
       transparent: true,
       // alwaysOnTop: true,

@@ -2,10 +2,11 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
-  search: (q) => ipcRenderer.invoke('search:query', q),
+  search: (q, options) => ipcRenderer.invoke('search:query', q, options),
+  getVersions: () => ipcRenderer.invoke('bible:versions'),
   getSuggestions: (input) => ipcRenderer.invoke('search:suggestions', input),
   getVerseRange: (py, chapter) => ipcRenderer.invoke('search:verse-range', py, chapter),
-  getNextVerse: (py, chapter, currentMaxVerse) => ipcRenderer.invoke('search:next-verse', py, chapter, currentMaxVerse),
+  getNextVerse: (py, chapter, currentMaxVerse, options) => ipcRenderer.invoke('search:next-verse', py, chapter, currentMaxVerse, options),
   projectorToggle: () => ipcRenderer.invoke('projector:toggle'),
   displays: () => ipcRenderer.invoke('display:list'),
   setDisplay: (id) => ipcRenderer.invoke('display:set', id),

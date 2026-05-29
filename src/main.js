@@ -3,7 +3,7 @@ import { app } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import Store from './store.js'
-import { initDB, closeDB, getVersesByRef } from './db.js'
+import { initDB, initTranslations, closeDB, getVersesByRef } from './db.js'
 import Logger from './utils/logger.js'
 // 导入管理模块
 import WindowManager from './managers/window-manager.js'
@@ -30,6 +30,9 @@ const store = new Store({
         scrollSpeed: 0.4, // 滚动速度
         fixedTitle: true, // 固定标题
         lineHeight: 1.6, // 行高
+        dualLanguage: true,
+        primaryVersion: 'CUNPSS',
+        secondaryVersion: 'NR06',
         keyPrevVerse: 'ArrowUp', // 上一节快捷键
         keyNextVerse: 'ArrowDown', // 下一节快捷键
         keyProject: 'F9', // 投影快捷键
@@ -52,6 +55,18 @@ async function initializeApp() {
       : path.join(process.resourcesPath, 'data', 'bible.db')
     
     await initDB(dbPath)
+    const nr06Path = isDev
+      ? path.join(__dirname, '..', 'data', 'bible_NR06.json')
+      : path.join(process.resourcesPath, 'data', 'bible_NR06.json')
+
+    await initTranslations([
+      {
+        id: 'NR06',
+        name: 'Nuova Riveduta 2006 (Italiano)',
+        language: 'it',
+        path: nr06Path
+      }
+    ])
     
     // 创建管理器实例
     windowManager = new WindowManager()
@@ -67,7 +82,10 @@ async function initializeApp() {
       // 窗口加载完成后设置默认内容
       controlWin.webContents.once('did-finish-load', async () => {
         try {
-          const defaultResult = await getVersesByRef('CSJ 1 1-13')
+          const defaultResult = await getVersesByRef('CSJ 1 1', {
+            dualLanguage: store.get('dualLanguage'),
+            secondaryVersion: store.get('secondaryVersion')
+          })
           controlWin.webContents.send('default-content', defaultResult)
           Logger.log('默认内容已加载: 创世纪 1:1-13')
         } catch (err) {
@@ -95,7 +113,6 @@ async function initializeApp() {
 
 async function startApplication() {
   if (!systemManager.setupSingleInstance()) {
-    Logger.error('Another instance is already running.')
     return
   }
   

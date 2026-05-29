@@ -82,13 +82,18 @@ class SystemManager {
     const gotTheLock = app.requestSingleInstanceLock()
     if (!gotTheLock) {
       Logger.log('Another instance is running. Focusing on the existing one.')
-      app.quit()
+      app.exit(0)
       return false
     }
     return true
   }
 
   setupAppEvents() {
+    app.on('second-instance', () => {
+      Logger.log('Second instance requested, showing existing control window.')
+      this.windowManager.showControlWindow()
+    })
+
     app.on('window-all-closed', (e) => {
       // 常驻托盘，不退出
       e.preventDefault()
@@ -98,13 +103,17 @@ class SystemManager {
     app.on('before-quit', () => {
       Logger.log('App is about to quit')
       this.windowManager.cleanup()
-      globalShortcut.unregisterAll()
+      if (app.isReady()) {
+        globalShortcut.unregisterAll()
+      }
     })
   }
 
   cleanup() {
     Logger.log('Cleaning up SystemManager resources')
-    globalShortcut.unregisterAll()
+    if (app.isReady()) {
+      globalShortcut.unregisterAll()
+    }
   }
 }
 

@@ -16,7 +16,7 @@
       background: #ffffffcc; 
       backdrop-filter: blur(6px); 
       box-shadow: 0 8px 30px rgba(0,0,0,.2); 
-      overflow: hidden; 
+      overflow: auto; 
     }
     .settings-panel {
       width: 350px;
@@ -97,7 +97,7 @@
       display:flex; 
       align-items:center; 
       justify-content:space-between; 
-      padding: 10px 12px; 
+      padding: 8px 12px; 
       background:#f3f3f3; 
       -webkit-app-region: drag; 
     }
@@ -110,14 +110,14 @@
       -webkit-app-region: no-drag; 
     }
     header strong { -webkit-app-region: no-drag; }
-    .row { padding: 8px 12px; }
+    .row { padding: 6px 12px; }
     .input { width: 100%; padding: 8px 0px; border: 1px solid #ccc; border-radius:6px; font-size: 14px; }
     .input.error { border-color: #dc3545; background-color: #ffebee; }
     .buttons { display:flex; gap:8px; -webkit-app-region: no-drag; }
     .btn-primary { background:#1e90ff; color:#fff; }
     .btn-settings { background:#6c757d; color:#fff; }
     .btn-about { background:#17a2b8; color:#fff; }
-    .preview-shell { padding: 8px 12px; }
+    .preview-shell { padding: 6px 12px 12px; }
     .preview-frame { width: 100%; background:#111; border-radius:8px; display: block; }
     .meta { color:#bbb; font-size: 12px; padding:4px 0; margin-bottom: 8px; }
     select { width: 100%; padding:6px; border-radius:6px; border:1px solid #ccc; }
@@ -252,12 +252,78 @@
       height: 12px;
       font-size: 12px;
     }
+
+    .language-row label {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+      color: #333;
+    }
+    .language-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .language-toggle span {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+    .switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      display: inline-block;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: #bdbdbd;
+      border-radius: 999px;
+      transition: .18s ease;
+    }
+    .slider:before {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      left: 2px;
+      top: 2px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25);
+      transition: .18s ease;
+    }
+    .switch input:checked + .slider {
+      background: #1e90ff;
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(22px);
+    }
+    .version-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .version-summary {
+      color: #666;
+      font-size: 11px;
+      padding-top: 4px;
+      line-height: 1.3;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <strong>控制面板</strong>
+      <strong id="headerTitle">控制面板</strong>
       <div class="buttons">
         <button id="btnAbout" class="btn btn-about">关于</button>
         <button id="btnSettings" class="btn btn-settings">设置</button>
@@ -265,6 +331,27 @@
         <button id="btnExit" class="btn">退出</button>
       </div>
     </header>
+
+    <div class="row language-row">
+      <div class="language-toggle">
+        <span>双译本模式</span>
+        <label class="switch">
+          <input id="dualLanguage" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="version-grid">
+        <div>
+          <label for="primaryVersion">中文版本</label>
+          <select id="primaryVersion"></select>
+        </div>
+        <div>
+          <label for="secondaryVersion">第二译本</label>
+          <select id="secondaryVersion"></select>
+        </div>
+      </div>
+      <div id="versionSummary" class="version-summary">中文版本：CUNPSS</div>
+    </div>
 
     <div class="row">
       <label>快捷输入（如：CSJ 1 12 16）</label>

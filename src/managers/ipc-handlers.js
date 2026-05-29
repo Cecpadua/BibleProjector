@@ -1,6 +1,6 @@
 // ipc-handlers.js - IPC通信处理模块
 import { ipcMain, screen, shell } from 'electron'
-import { getVersesByRef, getBookSuggestions, getVerseRange } from '../db.js'
+import { getVersesByRef, getBookSuggestions, getVerseRange, getAvailableVersions } from '../db.js'
 import Logger from '../utils/logger.js'
 
 class IPCHandlers {
@@ -22,15 +22,19 @@ class IPCHandlers {
     })
 
     // 搜索相关
-    ipcMain.handle('search:query', async (e, queryText) => {
+    ipcMain.handle('search:query', async (e, queryText, options = {}) => {
       try {
-        const result = await getVersesByRef(queryText)
+        const result = await getVersesByRef(queryText, options)
         Logger.log('查询结果:', result)
         return result
       } catch (err) {
         Logger.error('查询失败:', err.message)
         return { error: err.message }
       }
+    })
+
+    ipcMain.handle('bible:versions', async () => {
+      return getAvailableVersions()
     })
 
     ipcMain.handle('search:suggestions', async (e, input) => {
@@ -53,10 +57,10 @@ class IPCHandlers {
       }
     })
 
-    ipcMain.handle('search:next-verse', async (e, py, chapter, currentMaxVerse) => {
+    ipcMain.handle('search:next-verse', async (e, py, chapter, currentMaxVerse, options = {}) => {
       try {
         const nextVerse = currentMaxVerse + 1
-        const result = await getVersesByRef(`${py} ${chapter} ${nextVerse}`)
+        const result = await getVersesByRef(`${py} ${chapter} ${nextVerse}`, options)
         return result
       } catch (err) {
         Logger.error('获取下一节经文失败:', err.message)

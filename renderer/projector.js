@@ -1,4 +1,4 @@
-import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC } from "./common.js"
+import { wrapText, hexToRgba, userSettings, renderCanvasContent, setupCanvas as SC, measureContentHeight, measureVerseHeight } from "./common.js"
 
 const canvas = document.getElementById('projectorCanvas')
 let ctx = canvas.getContext('2d') // 使用let而不是const
@@ -82,34 +82,14 @@ canvas.addEventListener('wheel', (e) => {
   
   e.preventDefault()
   const rect = canvas.getBoundingClientRect()
-  
-  // 精确计算总内容高度
-  const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
-  const paddingTop = rect.height * 0.04
-  
-  // 计算标题高度
-  const titleHeight = fontSizePx * 0.7  + rect.height * 0.01
-  
-  // 计算所有经文的高度
-  let contentHeight = paddingTop + titleHeight
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-  
-  // 临时创建canvas context来测量文本
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
-  tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  currentData.verses.forEach(verse => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    contentHeight += lines.length * lineHeight + fontSizePx * 0.2 // verse间距
+
+  const contentHeight = measureContentHeight({
+    ctx,
+    currentData,
+    canvasElement: canvas,
+    fontSize,
+    dualLanguage: !!currentData.meta.dualLanguage
   })
-  
-  // 底部额外空间
-  contentHeight += lineHeight * 3
-  
-  // 计算最大滚动距离
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
   // 计算目标滚动位置（可调节滚动敏感度）
@@ -128,7 +108,7 @@ canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect()
   const clickY = e.clientY - rect.top + scrollOffset
   const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
+  const lineHeight = fontSizePx * userSettings.lineHeight
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
@@ -143,9 +123,7 @@ canvas.addEventListener('click', (e) => {
   // 检查点击位置对应的经文
   for (let i = 0; i < currentData.verses.length; i++) {
     const verse = currentData.verses[i]
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    const verseHeight = lines.length * lineHeight
+    const verseHeight = measureVerseHeight(tempCtx, verse, maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage)
     
     if (clickY >= currentY && clickY < currentY + verseHeight) {
       // 点击的是当前经文
@@ -159,7 +137,7 @@ canvas.addEventListener('click', (e) => {
       return
     }
     
-    currentY += verseHeight + fontSizePx * 0.2
+    currentY += verseHeight + fontSizePx * 0.32
   }
   
   // 如果点击的不是任何经文，取消高亮
@@ -251,34 +229,14 @@ window.api.onProjectorScroll((percent) => {
   
   // 使用实际的Canvas逻辑尺寸而不是getBoundingClientRect
   const rect = canvas.getBoundingClientRect()
-  
-  // 精确计算总内容高度（与control.js保持一致）
-  const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
-  const paddingTop = rect.height * 0.04
-  
-  // 计算标题高度
-  const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
-  
-  // 计算所有经文的高度 - 使用相同的逻辑
-  let contentHeight = paddingTop + titleHeight
-  const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-  
-  // 创建临时Canvas进行文本测量，确保与控制窗口一致
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
-  tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  
-  currentData.verses.forEach(verse => {
-    const text = `${verse.VerseSN}. ${verse.strjw}`
-    const lines = wrapText(tempCtx, text, maxWidth)
-    contentHeight += lines.length * lineHeight + fontSizePx * 0.2 // verse间距
+
+  const contentHeight = measureContentHeight({
+    ctx,
+    currentData,
+    canvasElement: canvas,
+    fontSize,
+    dualLanguage: !!currentData.meta.dualLanguage
   })
-  
-  // 底部额外空间
-  contentHeight += lineHeight * 3
-  
-  // 计算最大滚动距离
   const maxScroll = Math.max(0, contentHeight - rect.height)
   
   // 使用平滑滚动 - 添加调试日志
@@ -334,7 +292,7 @@ function scrollToVerse(verseIndex) {
   
   const rect = canvas.getBoundingClientRect()
   const fontSizePx = (fontSize / 100) * rect.height
-  const lineHeight = fontSizePx * 1.6
+  const lineHeight = fontSizePx * userSettings.lineHeight
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
   
@@ -348,17 +306,8 @@ function scrollToVerse(verseIndex) {
   
   // 计算到目标经文的距离
   for (let i = 0; i < verseIndex; i++) {
-    const verse = currentData.verses[i]
-    const text = `${verse.VerseSN}. ${verse.strjw}`
     const maxWidth = Math.floor(rect.width - rect.width * 0.06 * 2)
-    
-    // 临时创建canvas context来测量文本
-    const tempCanvas = document.createElement('canvas')
-    const tempCtx = tempCanvas.getContext('2d')
-    tempCtx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-    
-    const lines = wrapText(tempCtx, text, maxWidth)
-    targetY += lines.length * lineHeight + fontSizePx * 0.2
+    targetY += measureVerseHeight(ctx, currentData.verses[i], maxWidth, lineHeight, maxWidth * 0.05, !!currentData.meta.dualLanguage) + fontSizePx * 0.32
   }
   
   // 设置滚动位置使目标经文在可见区域的合适位置
