@@ -5,7 +5,7 @@ export let userSettings = {
   highlightBackgroundColor: '#1e90ff',
   highlightTextColor: '#ffff00',
   scrollSpeed: 0.4, // 滚轮速度 (0.1-1.0)
-  fixedTitle: true ,
+  fixedTitle: true,
   lineHeight: 1.6,
   dualLanguage: true,
   primaryVersion: 'CUNPSS',
@@ -15,11 +15,11 @@ export let userSettings = {
   keyNextVerse: 'ArrowDown',
   keyProject: 'F9',
   keyShowControl: 'Control+Space',
-  autoFit: false  // 自动适配：缩小字体让整章在屏幕内完整显示
+  autoFit: false // 自动适配：缩小字体让整章在屏幕内完整显示
 }
 
 export async function resetSettings() {
-userSettings = await window.api.getDefaultSettings()
+  userSettings = await window.api.getDefaultSettings()
 }
 
 export function getVerseText(verse, language = 'primary') {
@@ -29,15 +29,49 @@ export function getVerseText(verse, language = 'primary') {
   return `${verse.VerseSN}. ${verse.strjw}`
 }
 
+/**
+ * 双语言布局：
+ * 做成类似截图效果：
+ * - 中文在左边
+ * - 第二语言在右边
+ * - 中间留出明显空白
+ * - 第二语言区域稍宽
+ * - 不改变字体大小
+ */
+function getDualColumnLayout(maxWidth) {
+  const columnGap = Math.max(56, maxWidth * 0.085)
+
+  const availableWidth = maxWidth - columnGap
+
+  const primaryWidth = Math.floor(availableWidth * 0.43)
+  const secondaryWidth = Math.floor(availableWidth * 0.57)
+
+  return {
+    columnGap,
+    primaryWidth,
+    secondaryWidth
+  }
+}
+
 export function measureVerseHeight(ctx, verse, maxWidth, lineHeight, gap = 0, dualLanguage = false) {
   if (!dualLanguage) {
     return wrapText(ctx, getVerseText(verse), maxWidth).length * lineHeight
   }
 
-  const columnGap = gap || Math.max(18, maxWidth * 0.04)
-  const columnWidth = Math.max(40, (maxWidth - columnGap) / 2)
-  const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
-  const secondaryLines = wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth)
+  const layout = getDualColumnLayout(maxWidth)
+
+  const primaryLines = wrapText(
+    ctx,
+    getVerseText(verse),
+    layout.primaryWidth
+  )
+
+  const secondaryLines = wrapText(
+    ctx,
+    getVerseText(verse, 'secondary'),
+    layout.secondaryWidth
+  )
+
   return Math.max(primaryLines.length, secondaryLines.length) * lineHeight
 }
 
@@ -50,13 +84,25 @@ export function measureContentHeight({ ctx, currentData, canvasElement, fontSize
   const padding = rect.width * 0.06
   const paddingTop = rect.height * 0.04
   const titleHeight = fontSizePx * 0.7 + rect.height * 0.01
-  const maxWidth = Math.floor(rect.width - padding * 2)
+
+  const maxWidth = dualLanguage
+    ? Math.floor(rect.width - padding * 1.15)
+    : Math.floor(rect.width - padding * 2)
 
   let contentHeight = paddingTop + titleHeight + 10
+
   currentData.verses.forEach(verse => {
-    contentHeight += measureVerseHeight(ctx, verse, maxWidth, lineHeight, maxWidth * 0.05, dualLanguage)
+    contentHeight += measureVerseHeight(
+      ctx,
+      verse,
+      maxWidth,
+      lineHeight,
+      0,
+      dualLanguage
+    )
     contentHeight += fontSizePx * 0.32
   })
+
   contentHeight += lineHeight * 3
   return contentHeight
 }
@@ -68,39 +114,62 @@ export function measureContentHeight({ ctx, currentData, canvasElement, fontSize
  */
 export function autoFitFontSize({ ctx, currentData, canvasElement, minSize = 2, maxSize = 12 }) {
   if (!currentData || !ctx || !canvasElement) return userSettings.fontSize
+
   const rect = canvasElement.getBoundingClientRect()
   const dualLanguage = !!(currentData.meta.dualLanguage && currentData.meta.secondaryVersion)
 
-  let lo = minSize, hi = maxSize, best = minSize
+  let lo = minSize
+  let hi = maxSize
+  let best = minSize
+
   for (let iter = 0; iter < 20; iter++) {
     const mid = (lo + hi) / 2
-    const h = measureContentHeight({ ctx, currentData, canvasElement, fontSize: mid, dualLanguage })
+
+    const h = measureContentHeight({
+      ctx,
+      currentData,
+      canvasElement,
+      fontSize: mid,
+      dualLanguage
+    })
+
     if (h <= rect.height) {
       best = mid
       lo = mid
     } else {
       hi = mid
     }
+
     if (hi - lo < 0.05) break
   }
+
   return best
 }
 
-export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, canvasElement, scrollOffsetValue }) {
+export function renderCanvasContent({
+  ctx,
+  currentData,
+  highlightedVerse = -1,
+  canvasElement,
+  scrollOffsetValue
+}) {
   if (!currentData || !ctx || !canvasElement) return
+
   const rect = canvasElement.getBoundingClientRect()
 
   // 设置背景色
   ctx.fillStyle = userSettings.backgroundColor
   ctx.fillRect(0, 0, rect.width, rect.height)
 
-  // 设置字体和颜色
-  // autoFit 模式：自动缩小字体让整章内容完整显示（不滚动），忽略 scrollOffsetValue
   const dualLanguage = !!(currentData.meta.dualLanguage && currentData.meta.secondaryVersion)
+
+  // autoFit 模式才会自动缩小字体；普通模式不改变字体大小
   const effectiveFontSize = userSettings.autoFit
     ? autoFitFontSize({ ctx, currentData, canvasElement })
     : userSettings.fontSize
+
   const fontSizePx = (effectiveFontSize / 100) * rect.height
+
   ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
   ctx.fillStyle = userSettings.textColor
   ctx.textAlign = 'left'
@@ -112,7 +181,6 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
   // 渲染标题
   const { meta, verses } = currentData
   const metaText = `${meta.book} 第${meta.chapter}章 ${meta.range[0]}-${meta.range[1]}`
-  // dualLanguage already declared above
   const titleFontSize = fontSizePx * 0.7
   const titleHeight = titleFontSize + rect.height * 0.01
 
@@ -126,7 +194,10 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
   }
 
   // 内容起始位置
-  let contentStartY = userSettings.fixedTitle ? (paddingTop + titleHeight) : paddingTop
+  const contentStartY = userSettings.fixedTitle
+    ? paddingTop + titleHeight
+    : paddingTop
+
   const effectiveScroll = userSettings.autoFit ? 0 : scrollOffsetValue
   let y = contentStartY + 10 - effectiveScroll
 
@@ -139,51 +210,106 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
 
   // 渲染经文
   ctx.font = `${fontSizePx}px "Microsoft YaHei", Arial, sans-serif`
-  const lineHeight = fontSizePx * userSettings.lineHeight
-  const maxWidth = Math.floor(rect.width - padding * 2)
 
-  console.log(`Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}, fixedTitle=${userSettings.fixedTitle}`)
+  const lineHeight = fontSizePx * userSettings.lineHeight
+
+  // 双语言模式下稍微扩大可用宽度，让右侧更像截图
+  const maxWidth = dualLanguage
+    ? Math.floor(rect.width - padding * 1.15)
+    : Math.floor(rect.width - padding * 2)
+
+  console.log(
+    `Canvas ${rect.width}x${rect.height}, fontSize=${fontSizePx}px, maxWidth=${maxWidth}, fixedTitle=${userSettings.fixedTitle}, dualLanguage=${dualLanguage}`
+  )
 
   verses.forEach((verse, verseIndex) => {
-    const columnGap = Math.max(18, maxWidth * 0.05)
-    const columnWidth = dualLanguage ? Math.floor((maxWidth - columnGap) / 2) : maxWidth
-    const primaryLines = wrapText(ctx, getVerseText(verse), columnWidth)
-    const secondaryLines = dualLanguage ? wrapText(ctx, getVerseText(verse, 'secondary'), columnWidth) : []
-    const lineCount = dualLanguage ? Math.max(primaryLines.length, secondaryLines.length) : primaryLines.length
+    const layout = dualLanguage ? getDualColumnLayout(maxWidth) : null
+
+    const primaryWidth = dualLanguage
+      ? layout.primaryWidth
+      : maxWidth
+
+    const secondaryWidth = dualLanguage
+      ? layout.secondaryWidth
+      : 0
+
+    const primaryLines = wrapText(
+      ctx,
+      getVerseText(verse),
+      primaryWidth
+    )
+
+    const secondaryLines = dualLanguage
+      ? wrapText(
+          ctx,
+          getVerseText(verse, 'secondary'),
+          secondaryWidth
+        )
+      : []
+
+    const lineCount = dualLanguage
+      ? Math.max(primaryLines.length, secondaryLines.length)
+      : primaryLines.length
+
     const verseHeight = lineCount * lineHeight
     const verseStartY = y
 
-    // 高亮
+    // 高亮背景
     if (highlightedVerse === verseIndex) {
       const rgba = hexToRgba(userSettings.highlightBackgroundColor, 0.3)
       ctx.fillStyle = rgba
 
-      const highlightStartY = userSettings.fixedTitle ? (verseStartY - verseStartY * 0.10) : verseStartY - verseStartY * 0.1
-      const highlightHeight = userSettings.fixedTitle ? Math.min(verseHeight, rect.height - highlightStartY) : verseHeight
-      ctx.fillRect(padding - 5, highlightStartY, rect.width - padding * 2 + 10, highlightHeight)
+      const highlightStartY = userSettings.fixedTitle
+        ? verseStartY - verseStartY * 0.10
+        : verseStartY - verseStartY * 0.1
+
+      const highlightHeight = userSettings.fixedTitle
+        ? Math.min(verseHeight, rect.height - highlightStartY)
+        : verseHeight
+
+      ctx.fillRect(
+        padding - 5,
+        highlightStartY,
+        rect.width - padding * 2 + 10,
+        highlightHeight
+      )
     }
 
-    ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : userSettings.textColor
+    // 左侧中文
+    ctx.fillStyle = highlightedVerse === verseIndex
+      ? userSettings.highlightTextColor
+      : userSettings.textColor
 
     primaryLines.forEach(lineText => {
       const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
+
       if (y >= minY && y <= rect.height) {
         ctx.fillText(lineText, padding, y)
       }
+
       y += lineHeight
     })
 
+    // 右侧第二语言
     if (dualLanguage) {
-      const secondaryX = padding + columnWidth + columnGap
+      const secondaryX = padding + primaryWidth + layout.columnGap
       let secondaryY = verseStartY
-      ctx.fillStyle = highlightedVerse === verseIndex ? userSettings.highlightTextColor : '#7da7ff'
+
+      ctx.fillStyle = highlightedVerse === verseIndex
+        ? userSettings.highlightTextColor
+        : '#7da7ff'
+
       secondaryLines.forEach(lineText => {
         const minY = userSettings.fixedTitle ? contentStartY : -lineHeight
+
         if (secondaryY >= minY && secondaryY <= rect.height) {
           ctx.fillText(lineText, secondaryX, secondaryY)
         }
+
         secondaryY += lineHeight
       })
+
+      // 每一节的高度按照两边最高的那边计算
       y = verseStartY + verseHeight
     }
 
@@ -198,14 +324,14 @@ export function renderCanvasContent({ ctx,currentData,highlightedVerse = -1, can
 export function setupCanvas(canvas, ctx, callback = () => {}) {
   const rect = canvas.getBoundingClientRect()
   const dpr = window.devicePixelRatio || 1
-  
+
   canvas.width = rect.width * dpr
   canvas.height = rect.height * dpr
 
   // 重新获取context以避免累积缩放
   ctx = canvas.getContext('2d')
   ctx.scale(dpr, dpr)
-  
+
   // 设置相同的文本渲染属性
   ctx.textRendering = 'optimizeLegibility'
   ctx.fontKerning = 'normal'
@@ -216,28 +342,28 @@ export function setupCanvas(canvas, ctx, callback = () => {}) {
 export function wrapText(ctx, text, maxWidth) {
   const words = text.split('')
   let line = ''
-  let lines = []
-  
+  const lines = []
+
   for (let i = 0; i < words.length; i++) {
     const testLine = line + words[i]
     const metrics = ctx.measureText(testLine)
     const width = metrics.width
-    
+
     // 使用更保守的阈值，为投影窗口预留更多空间
-    if (width > (maxWidth * 0.98) && line !== '') { // 98%的宽度作为阈值
+    if (width > maxWidth * 0.98 && line !== '') {
       lines.push(line)
       line = words[i]
     } else {
       line = testLine
     }
   }
+
   if (line !== '') {
     lines.push(line)
   }
-  
+
   return lines
 }
-
 
 // 颜色转换函数
 export function hexToRgba(hex, alpha = 1) {
